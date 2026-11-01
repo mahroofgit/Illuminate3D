@@ -17,8 +17,8 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
 - **Shape › Base** – set the table base’s size and give it the shade’s cross-section and patterns (lined up with the locked shade) or its own sides and twist; the lock, cavity, cover and vents inside are never touched.
 - **Shade skirt** – an outer shell carries the shade’s outline down over a neck on the base, so shade and base read as one form; it prints from the bed without supports.
 - **Light-source presets** – one click applies a whole puck/slot/diffuser/cable/cover setup (built-in *3mm LED Puck*), and you can save your own.
-- **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance, weight estimate.
-- **Export** – each part as its own STL, or **Export print plate**: shade, base and cover laid out together on your printer's bed, oriented for printing, in one STL.
+- **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance; size and filament weight per part plus the assembled total.
+- **Export** (app bar menu) – each part as its own STL, or **Print plate**: shade, base and cover laid out together on your printer's bed, oriented for printing, in one STL.
 - **Projects** – New / Open / Save / Save as (⌘S, ⌘O), undo / redo (⌘Z, ⇧⌘Z), with thumbnails, stored in the browser; export and import `.json` files to back up or move designs.
 - Collapsible setting groups.
 - Viewer with a solid section view (turnable around the axis), exploded view, lamp-on preview, and toggles to show or hide the shade, base and hardware.
