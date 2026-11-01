@@ -283,7 +283,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffT: 0.8, diffGap: 6, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -531,6 +531,44 @@ const rot = (m, v) => keep(m.rotate(v));
 const uni = list => list.length === 1 ? list[0] : keep(W.Manifold.union(list));
 const sub = (a, b) => keep(a.subtract(b));
 
+// Diffuser: a thin cone inside the shade over the puck. Its rim meets the wall a set gap above the puck top and it
+// rises to a point at the overhang-safe angle, so it prints with the shade (connector end down) without supports.
+const diffuserOn = () => P.mount === 'twist' && P.diffuser && P.orient !== 'pendant' && P.baseType !== 'adapter' && (P.insert === 'puck' || P.insert === 'slot');
+function puckTopZ(B) {   // top of the puck, in shade coordinates (collar bottom = 0)
+  const lift = puckLift(B);
+  return B.insert === 'slot' ? slotDims(B).zSeat + P.slotH - B.f : lift;
+}
+function diffuserGeom(S) {
+  const B = baseDims(), N = S.N, NM = N * S.M, Rci = P.collarD / 2;
+  const phi = (Math.max(40, 90 - P.overhang) + 5) * DEG, t = Math.tan(phi), tv = P.diffT / Math.cos(phi);
+  const zLow = puckTopZ(B) + P.diffGap;
+  // widest inner radius right at the rim height: the collar bore below the flare, else the two shade rows around zLow
+  let rAtt = Rci;
+  if (zLow > S.rowZ[0]) {
+    rAtt = 0;
+    let i = 0; while (i < S.M - 2 && S.rowZ[i + 1] < zLow) i++;
+    for (const ii of [i, i + 1]) for (let j = 0; j < N; j++) { const k = (NM + ii * N + j) * 3; rAtt = Math.max(rAtt, Math.hypot(S.pos[k], S.pos[k + 1])); }
+  }
+  return { zLow, t, tv, rAtt, zTop: zLow + tv + rAtt * t };
+}
+function diffuserSolid(S, seg) {
+  const g = diffuserGeom(S), N = S.N, M = S.M, NM = N * M;
+  if (g.zTop > S.zEnd - 2) return null;
+  // filled solid inside the shade's outer surface (plus the collar), used to trim the cone into the wall
+  const v = new Float32Array(NM * 3 + 6); v.set(S.pos.subarray(0, NM * 3));
+  v.set([0, 0, S.rowZ[0], 0, 0, S.rowZ[M - 1]], NM * 3);
+  const BC = NM, TC = NM + 1, tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
+  const inside = uni([keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), cyl(P.collarH + 0.5, P.collarD / 2 + P.collarWall, P.collarD / 2 + P.collarWall, seg)]);
+  const Rb = g.rAtt + 2 * Math.max(P.wall, P.collarWall) + 2;
+  const cone = revolve([[0, g.zTop - g.tv], [Rb, g.zTop - g.tv - Rb * g.t], [Rb, g.zTop - Rb * g.t], [0, g.zTop]], 360, seg);
+  return keep(cone.intersect(inside));
+}
 function shadeConnector(S, seg, overlap = 0.4) {
   if (P.mount === 'ring') {
     const holeR = P.holeD / 2, T = P.plateT;
@@ -557,6 +595,8 @@ function shadeConnector(S, seg, overlap = 0.4) {
     const list = [sub(cyl(P.collarH + overlap, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1))];
     const lugPoly = [[Ro - 0.5, 0], [Ro + d, 0], [Ro + d, lh], [Ro, lh + d], [Ro - 0.5, lh + d]];
     for (let k = 0; k < P.lugs; k++) list.push(rotZ(revolve(lugPoly, P.lugW, seg), k * 360 / P.lugs - P.lugW / 2));
+    const dif = diffuserOn() ? diffuserSolid(S, seg) : null;
+    if (dif && !dif.isEmpty()) list.push(dif);
     return uni(list);
   }
   return null;
@@ -576,7 +616,7 @@ function baseDims() {
     else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', P.seatDepth], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + 4 - P.slotW / 2], ['clearance', 3]];
     else if (insert === 'slot') need = [['seat', P.seatDepth], ['cable channel', P.cableW + 1.5]];
     else need = [['socket plate', P.plateT], ['holder cavity', 24]];
-    if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT + (insert === 'socket' || P.slotStyle === 'funnel' ? 2 : 0)]);
+    if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT + (insert === 'socket' || P.slotStyle === 'funnel' ? 2.6 : 0)]);
     need.unshift(['twist-lock socket', boreDepth]);
     minH = need.reduce((a, [, v]) => a + v, 0);
     minParts = need.map(([k, v]) => `${k} ${+v.toFixed(1)}`).join(' + ');
@@ -673,9 +713,14 @@ const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (he
 // slots in the cavity wall, a twist carries them along a groove, and they rest on the ledge below it behind a small
 // bump. The groove roofs are 45° and the cover exports upside down, so nothing needs supports.
 const coverEdge = B => { const k = coverShape(B); return k.rect ? k.hx : k.R; };   // where the channel leaves the opening
+// The groove roof is a ramp: the lugs go in with play (zt0) and the twist wedges them down onto the ledge, finishing
+// 0.1 mm tight (zt1) with the cover flush — so it locks solid like a bottle cap instead of rattling.
+// The lug's top outer edge has a 45° bevel x that seats against the 45° groove roof, so locking also centres the cover.
 function coverLock(B) {
-  const k = coverShape(B), R = k.R, c = B.c, d = 1.2, lh = 1.2, T = P.coverT;
-  return { R, c, d, lh, T, zb: T - lh - c, zt: T + c, lugA: (6 / R) / DEG, turn: 28, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
+  const k = coverShape(B), R = k.R, c = B.c, d = 1.2, lh = 1.2, T = P.coverT, x = 0.6;
+  const ro = R - c + d, g = ro + 0.15;                // lug outer radius; groove outer radius (roof meets it at zr)
+  const zr1 = T - x - P.coverFit - (g - ro), zr0 = zr1 + 0.6 + P.coverFit;  // roof at lock (coverFit mm squeeze on the bevel) / at entry
+  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr0, zr1, zv: T + 2 * c, lugA: (6 / R) / DEG, turn: 28, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
 }
 function coverCuts(B, seg) {
   const k = coverShape(B), out = [];
@@ -685,20 +730,25 @@ function coverCuts(B, seg) {
     out.push(tr(box(2.8, 5, P.coverT * 0.6 + 1), -k.hx - 2.5, -2.5, -1));   // fingernail notch
     return out;
   }
-  const L = coverLock(B), { R, c, d, zb, zt, lugA, turn, ca } = L, g = R + d + c;
-  const vPoly = [[R - 0.3, -1], [g, -1], [g, zt], [R - 0.3, zt]];
-  const hPoly = [[R - 0.3, zb], [g, zb], [g, zt], [R, zt + d + c], [R - 0.3, zt + d + c]];
+  const L = coverLock(B), { R, g, zb, zr0: zt0, zr1: zt1, lugA, turn, ca } = L;
+  const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, L.zv], [R - 0.3, L.zv]];
+  const hPoly = z => [[R - 0.3, zb], [g, zb], [g, z], [R, z + (g - R)], [R - 0.3, z + (g - R)]];
+  const slice = (th, z) => hPoly(z).map(([r, zz]) => [r * Math.cos(th * DEG), r * Math.sin(th * DEG), zz]);
   for (const a of L.at) {
-    out.push(rotZ(revolve(vPoly, lugA + 2 * ca, seg), a - turn - lugA / 2 - ca));
-    out.push(rotZ(revolve(hPoly, turn + lugA + 2 * ca, seg), a - turn - lugA / 2 - ca));
+    const a0 = a - turn - lugA / 2 - ca, a2 = a + lugA / 2 + ca;   // groove start (entry slot) and end
+    const t0 = a - turn + lugA / 2, t1 = a - lugA / 2;              // ramp runs while the lug's leading edge travels in
+    out.push(rotZ(revolve(vPoly, lugA + 2 * ca, seg), a0));
+    out.push(rotZ(revolve(hPoly(zt0), t0 - a0 + 0.1, seg), a0));
+    out.push(rotZ(revolve(hPoly(zt1), a2 - t1 + 0.1, seg), t1 - 0.1));
+    const n = Math.max(2, Math.ceil((t1 - t0) / 1.5));
+    for (let i = 0; i < n; i++) {
+      const u0 = t0 + (t1 - t0) * i / n, u1 = t0 + (t1 - t0) * (i + 1) / n;
+      out.push(keep(W.Manifold.hull([...slice(u0 - 0.05, zt0 + (zt1 - zt0) * i / n), ...slice(u1 + 0.05, zt0 + (zt1 - zt0) * (i + 1) / n)])));
+    }
   }
   return out;
 }
-function coverBumps(B) {
-  if (coverShape(B).rect) return [];
-  const L = coverLock(B);
-  return L.at.map(a => rotZ(tr(rot(cyl(L.d + L.c + 0.3, 0.45, 0.45, 12), [0, 90, 0]), L.R - 0.3, 0, L.zb), a - L.lugA / 2 - L.ca - 1.5));
-}
+function coverBumps(B) { return []; }   // the wedge lock holds the cover; no bumps needed
 function buildCover(seg) {
   const B = baseDims(), k = coverShape(B), c = B.c, T = P.coverT, list = [];
   if (k.rect) {
@@ -709,7 +759,8 @@ function buildCover(seg) {
   }
   const L = coverLock(B), Rc = L.R - c;
   list.push(cyl(T, Rc, Rc, seg));
-  for (const a of L.at) list.push(rotZ(revolve([[Rc - 0.3, T - L.lh], [Rc + L.d, T - L.lh], [Rc + L.d, T], [Rc - 0.3, T]], L.lugA, seg), a - L.lugA / 2));
+  const lug = [[Rc - 0.3, T - L.lh], [L.ro, T - L.lh], [L.ro, T - L.x], [L.ro - L.x, T], [Rc - 0.3, T]];
+  for (const a of L.at) list.push(rotZ(revolve(lug, L.lugA, seg), a - L.lugA / 2));
   const sl = Math.min(24, 1.2 * Rc), sd = Math.min(1.2, T - 1.4);   // coin / fingernail slot to twist it
   return sub(uni(list), tr(box(sl, 2.4, sd + 1), -sl / 2, -1.2, -1));
 }
@@ -988,6 +1039,10 @@ function update() {
       const rr = riserR(B); let clash = false;
       for (let i = 0; i < S.M; i++) if (S.rowZ[i] <= lift + 0.5 && S.rowMinIn[i] < rr + B.c) clash = true;
       checks.push([!clash, clash ? `The ${fmt(lift)} mm puck riser would touch the shade’s inner wall — lower it or widen the shade near the collar` : `Puck raised ${fmt(lift)} mm on a riser inside the collar`]);
+    }
+    if (diffuserOn()) {
+      const g = diffuserGeom(S), ok = g.zTop <= S.zEnd - 2;
+      checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(P.diffGap)} mm above the puck` : `The diffuser cone would poke out of the top — lower the gap or use a taller shade`]);
     }
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
@@ -1391,6 +1446,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
   slider(p, 'Lift puck', 'puckLift', 0, 45, 0.5, 'mm', () => puckOn() || slotOn());
   note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
+  toggleRow(p, 'Diffuser', 'diffuser', () => tableBase() && (puckOn() || slotOn()));
+  note(p, 'A thin cone printed inside the shade just above the puck that softens the bright LED dots. It slopes at your overhang limit, so it prints with the shade without supports. Thinner lets more light through.', () => tableBase() && (puckOn() || slotOn()));
+  slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', () => tableBase() && (puckOn() || slotOn()) && P.diffuser);
+  slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', () => tableBase() && (puckOn() || slotOn()) && P.diffuser);
   select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
   slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
@@ -1402,7 +1461,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
   toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
   slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
-  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
+  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'How hard the twist-lock squeezes the cover when locked: 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
