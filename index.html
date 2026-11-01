@@ -255,7 +255,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, cableW: 5,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -421,7 +421,7 @@ function buildShade(N, layer) {
   let zStart = 0, transH = 0, Rco = 0, wT = 0;
   if (twistMount) {
     Rco = P.collarD / 2 + P.collarWall;
-    wT = Math.min(P.collarWall, P.wall / Math.cos(lim));
+    wT = Math.max(P.collarWall, P.wall / Math.cos(lim));
     let md = 0;
     for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - (Rco - wT)));
     transH = Math.max(2, md / Math.tan(lim));
@@ -495,7 +495,7 @@ const rot = (m, v) => keep(m.rotate(v));
 const uni = list => list.length === 1 ? list[0] : keep(W.Manifold.union(list));
 const sub = (a, b) => keep(a.subtract(b));
 
-function shadeConnector(S, seg) {
+function shadeConnector(S, seg, overlap = 0.4) {
   if (P.mount === 'ring') {
     const holeR = P.holeD / 2, T = P.plateT;
     const contour = arr => { const pts = []; for (let j = 0; j < S.N; j++) { const a = TAU * j / S.N; pts.push([arr[j] * Math.cos(a), arr[j] * Math.sin(a)]); } return pts; };
@@ -518,7 +518,7 @@ function shadeConnector(S, seg) {
   }
   if (P.mount === 'twist') {
     const Ri = P.collarD / 2, Ro = Ri + P.collarWall, d = P.lugDepth, lh = P.lugH;
-    const list = [sub(cyl(P.collarH + 0.4, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1))];
+    const list = [sub(cyl(P.collarH + overlap, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1))];
     const lugPoly = [[Ro - 0.5, 0], [Ro + d, 0], [Ro + d, lh], [Ro, lh + d], [Ro - 0.5, lh + d]];
     for (let k = 0; k < P.lugs; k++) list.push(rotZ(revolve(lugPoly, P.lugW, seg), k * 360 / P.lugs - P.lugW / 2));
     return uni(list);
@@ -562,6 +562,7 @@ function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
 }
 const fmt = v => +(+v).toFixed(1);
 const LIMITS = {
+  cableW: () => [P.cableD + 0.5, 12, `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
   seatDepth: () => [P.slotH, Math.max(8, P.slotH + 4), `the seat must be at least as deep as the puck is thick (${fmt(P.slotH)} mm) so it sits flush.`],
   slotW: () => [P.slotH + 2 * P.clearance, 20, `the slot must be wider than the puck thickness plus clearance so the puck fits through on its edge.`],
   collarH: () => [P.lugH + P.lugDepth + 3, 30, `the collar needs room for the ${fmt(P.lugH)} mm lug and the 45° chamfer above it.`],
@@ -612,7 +613,7 @@ function slotDims(B) {
 
 function buildBase(seg) {
   const B = baseDims(), { H, f } = B;
-  const body = B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve([[0, 0], [B.Rb - 0.8, 0], [B.Rb, 0.8], [B.Rt, H], [0, H]], 360, seg);
+  const body = B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer], [B.Rt, H], [0, H]] : [[0, 0], [B.Rb, 0], [B.Rt, H], [0, H]], 360, seg);
   const cut = [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
   const ca = (B.c / B.Ro) / DEG + 0.6;
@@ -652,6 +653,15 @@ function buildBase(seg) {
   }
   if (!B.adapter) cut.push(tr(box(B.Rb + 2, P.cableW, P.cableW), 0, -P.cableW / 2, -0.01));
   let result = sub(body, uni(cut));
+  if (!B.adapter && P.cableGrip) {
+    // Pinch nubs: pairs of half-buried pins on the channel walls leave a gap a little under the cable Ø,
+    // so the cable snaps in from below and stays put. Vertical, so they print without support.
+    const gap = Math.max(1, P.cableD - 0.4), rn = (P.cableW - gap) / 2, inner = baseFeatureR(B) + rn + 2;
+    const pins = [];
+    for (const x of [B.Rb - 5, B.Rb - 14]) if (x > inner && rn > 0.2)
+      for (const y of [-P.cableW / 2, P.cableW / 2]) pins.push(tr(cyl(P.cableW, rn, rn, 20), x, y, 0));
+    if (pins.length) result = keep(result.add(sub(uni(pins), sub(tr(cyl(P.cableW + 2, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
+  }
   if (P.detent) {
     const bumps = [], len = g1 - (B.Ro + 0.3);
     for (let k = 0; k < P.lugs; k++) {
@@ -765,7 +775,7 @@ function update() {
   let connVol = 0, baseVol = 0, baseBox = null;
   const B = baseDims();
   if (W) gcScope(() => {
-    const c = shadeConnector(S, 96);
+    const c = shadeConnector(S, 96, 0);
     if (c) { addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat); connVol = c.volume(); }
     if (P.mount === 'twist') { const b = buildBase(96); addSolid(baseGroup, manifoldToGeo(b), baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox(); }
   });
@@ -1007,7 +1017,7 @@ function h3(parent, text, when) { const e = document.createElement('h3'); e.text
 function note(parent, text, when) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
 function slider(parent, label, key, min, max, step, unit = '', when) {
   const row = document.createElement('div'); row.className = 'ctl';
-  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
+  row.innerHTML = `<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
   const [rg, nb] = row.querySelectorAll('input'), lab = row.querySelector('label');
   const sync = () => {
     const v = getK(key), lim = LIMITS[key]?.();
@@ -1154,25 +1164,13 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   segmented(p, 'Connection', 'mount', { twist: 'Twist-lock', ring: 'Socket ring', none: 'None' });
   note(p, '<b>Twist-lock</b>: the shade gets a collar with lugs that bayonet into a separate base or socket adapter — twist to lock, no tools. <b>Socket ring</b>: the shade clamps directly onto a lamp holder with its threaded shade ring.', () => P.mount !== 'none');
 
-  h3(p, 'Lamp holder', () => ringOn() || socketInsert());
-  select(p, 'Fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), () => ringOn() || socketInsert());
-  slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', () => ringOn() || socketInsert());
-  slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', () => (ringOn() || socketInsert()));
-  slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', () => ringOn() || socketInsert());
-  note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', () => ringOn() || socketInsert());
-
-  h3(p, 'Shade ring', ringOn);
-  segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
-  slider(p, 'Spokes', 'spokes', 2, 8, 1, '', () => ringOn() && P.ringStyle === 'spokes');
-  slider(p, 'Spoke width', 'spokeW', 3, 16, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
-  slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
-
-  h3(p, 'Base', twistOn);
-  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
-  note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
-  segmented(p, 'Light source', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, () => twistOn() && P.baseType === 'table' && P.orient !== 'pendant');
+  const tableBase = () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant');
+  const holderOn = () => ringOn() || socketInsert();
   const puckOn = () => twistOn() && !socketInsert() && P.insert === 'puck';
   const slotOn = () => twistOn() && !socketInsert() && P.insert === 'slot';
+
+  h3(p, 'Light source', () => twistOn() || ringOn());
+  segmented(p, 'Type', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, tableBase);
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
   slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
@@ -1183,10 +1181,30 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Slot width', 'slotW', 3, 20, 0.1, 'mm', slotOn);
   slider(p, 'Seat depth', 'seatDepth', 0.6, 8, 0.1, 'mm', slotOn);
   slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
-  slider(p, 'Base bottom Ø', 'baseD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
-  slider(p, 'Base top Ø', 'baseTopD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
-  slider(p, 'Base height', 'baseH', 10, 150, 0.5, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
-  slider(p, 'Cable slot', 'cableW', 3, 12, 0.5, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+  select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
+  slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
+  slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
+  slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', holderOn);
+  note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', holderOn);
+  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
+  slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
+  toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
+  note(p, 'The channel under the base has pinch nubs that leave a gap 0.4 mm under the cable Ø: press the cable up into it and it clicks in and stays put.', () => tableBase() && P.cableGrip);
+
+  h3(p, 'Shade ring', ringOn);
+  segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
+  slider(p, 'Spokes', 'spokes', 2, 8, 1, '', () => ringOn() && P.ringStyle === 'spokes');
+  slider(p, 'Spoke width', 'spokeW', 3, 16, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
+  slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
+
+  h3(p, 'Base', twistOn);
+  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
+  note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
+  slider(p, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
+  slider(p, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
+  slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
+  slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
+  note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
 
   h3(p, 'Twist lock', twistOn);
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
