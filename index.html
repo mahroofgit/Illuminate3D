@@ -85,7 +85,7 @@ input[type=number] { text-align: right; padding-right: 4px; }
 .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
 .seg button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 4px 2px; border-radius: 5px; font: inherit; font-size: 12px; cursor: pointer; }
 .seg button.on { background: var(--accent); color: #fff; }
-.switch { position: relative; width: 34px; height: 20px; flex: none; }
+.switch { display: block; position: relative; width: 34px; height: 20px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 20px; transition: .15s; cursor: pointer; }
 .switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: .15s; }
@@ -418,12 +418,12 @@ function buildShade(N, layer) {
 
   const o0 = new Float64Array(N), i0 = new Float64Array(N);
   rowBody(0, o0, i0);
-  let zStart = 0, transH = 0, Rco = 0, wT = 0;
+  let zStart = 0, transH = 0, Rco = 0, Rci = 0, wT = 0;
   if (twistMount) {
-    Rco = P.collarD / 2 + P.collarWall;
-    wT = Math.max(P.collarWall, P.wall / Math.cos(lim));
+    Rco = P.collarD / 2 + P.collarWall; Rci = P.collarD / 2;
+    wT = P.wall / Math.cos(lim);   // horizontal thickness that keeps the sloped flare at least one wall thick
     let md = 0;
-    for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - (Rco - wT)));
+    for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - Rci));
     transH = Math.max(2, md / Math.tan(lim));
     zStart = P.collarH;
   }
@@ -438,7 +438,15 @@ function buildShade(N, layer) {
     let z;
     if (i < nT) {
       const s = i / nT; z = zStart + s * transH;
-      for (let j = 0; j < N; j++) { O[j] = Rco + (o0[j] - Rco) * s; I[j] = (Rco - wT) + (i0[j] - (Rco - wT)) * s; }
+      // Flare from the collar's own walls (no step, so nothing overhangs at the joint). The trailing wall stays vertical
+      // until it's a full sloped-wall thickness away from the leading one, which thickens the joint like a fillet.
+      for (let j = 0; j < N; j++) {
+        let o = Rco + (o0[j] - Rco) * s, n = Rci + (i0[j] - Rci) * s;
+        const w = wT + (o0[j] - i0[j] - wT) * s;
+        if (o0[j] >= Rco) n = Math.min(n, Math.max(Rci, o - w));
+        else o = Math.max(o, Math.min(Rco, n + w));
+        O[j] = o; I[j] = n;
+      }
     } else { const zz = (i - nT) / nB * H; z = zb + zz; rowBody(zz, O, I); }
     rowZ[i] = z;
     let mi = 1e9;
@@ -655,16 +663,23 @@ function buildBase(seg) {
   if (!B.adapter) cut.push(tr(box(B.Rb + 2, P.cableW, P.cableW), 0, -P.cableW / 2, -0.01));
   let result = sub(body, uni(cut));
   if (!B.adapter && P.cableGrip) {
-    // Snap-in lips along the open bottom of the cable channel: the opening is narrower than the cable, so it pushes
-    // up past the lips and can't drop back out. The lips sit on the bed and their lead-in leans ~30°, so no supports.
-    const gap = Math.max(1, P.cableD - 0.6), p = (P.cableW - gap) / 2, lh = Math.min(1.6, P.cableW - P.cableD - 0.2);
-    const inner = baseFeatureR(B) + 2, L = 6, lips = [];
-    if (p > 0.2 && lh > 0.6) for (const x of [B.Rb - 4 - L, B.Rb - 16 - L]) if (x > inner)
-      for (const sgn of [-1, 1]) {
-        const y0 = sgn * P.cableW / 2, lip = (w, z, h) => tr(box(L, w + 0.2, h), x, sgn < 0 ? y0 - 0.2 : y0 - w, z);
-        lips.push(keep(W.Manifold.hull([lip(p * 0.35, 0, 0.01), lip(p, lh - 0.4, 0.4)])));
+    // Snap-in beads along the open bottom of the cable channel: round on top so the cable clicks past and pulls out
+    // easily, with a 45° underside down to the bed so they print without support. Placed in whatever run of channel
+    // is free between the light-source cavity and the rim.
+    const gap = Math.max(1, P.cableD - 0.6), hw = P.cableW / 2, rc = P.cableD / 2;
+    // shrink the beads until the cable, cradled on top of them, still fits under the channel roof
+    const cableTop = r => r * Math.SQRT2 + Math.sqrt(Math.max(0, (r + rc) ** 2 - hw * hw)) + rc;
+    let r = (P.cableW - gap) / 2; while (r > 0.4 && cableTop(r) > P.cableW - 0.1) r -= 0.05;
+    const x0 = baseFeatureR(B) + 1.5, x1 = B.Rb - 2 - P.footChamfer, span = x1 - x0;
+    const L = Math.min(8, span >= 12 ? (span - 4) / 2 : span), beads = [];
+    if (r > 0.4 && L >= 3) {
+      const starts = span >= 12 ? [x1 - L, x0] : [x0];
+      for (const x of starts) for (const sgn of [-1, 1]) {
+        const y0 = sgn * P.cableW / 2;
+        beads.push(keep(W.Manifold.hull([tr(rot(cyl(L, r, r, 24), [0, 90, 0]), x, y0, r * Math.SQRT2), tr(box(L, 0.01, 0.01), x, y0 - 0.005, 0)])));
       }
-    if (lips.length) result = keep(result.add(sub(uni(lips), sub(tr(cyl(P.cableW + 2, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
+    }
+    if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
   }
   if (P.detent) {
     const bumps = [], len = g1 - (B.Ro + 0.3);
@@ -1195,7 +1210,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
   slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
   toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
-  note(p, 'Snap-in lips along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out.', () => tableBase() && P.cableGrip);
+  note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
