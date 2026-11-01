@@ -1640,10 +1640,24 @@ document.getElementById('fRedo').onclick = redo;
 // the last folder per kind of file. Elsewhere (Safari) the file goes to the browser's download location.
 const slug = n => (n || 'lamp').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lamp';
 async function pickTarget(name, kind) {   // returns a file handle, 'download', or null if the user cancelled
-  if (!window.showSaveFilePicker) return 'download';
-  const types = kind === 'stl' ? [{ description: 'STL model', accept: { 'model/stl': ['.stl'] } }] : [{ description: 'Illuminate3D design', accept: { 'application/json': ['.json'] } }];
+  if (!window.showSaveFilePicker) {
+    let told = false; try { told = localStorage.getItem('illum.saveHint') === '1'; } catch {}
+    if (!told) {
+      alert('This browser can’t show a “Save to…” folder picker, so the file will go to your Downloads folder.\n\n' +
+        '• Safari: Settings → General → File download location → “Ask for each download”.\n' +
+        '• Or open Illuminate3D in Chrome or Edge, which ask where to save every time.');
+      try { localStorage.setItem('illum.saveHint', '1'); } catch {}
+    }
+    return 'download';
+  }
+  const types = kind === 'stl' ? [{ description: 'STL model', accept: { 'application/octet-stream': ['.stl'] } }] : [{ description: 'Illuminate3D design', accept: { 'application/json': ['.json'] } }];
   try { return await showSaveFilePicker({ suggestedName: name, types, id: 'illuminate3d-' + kind }); }
-  catch (e) { if (e.name === 'AbortError') return null; console.warn(e); return 'download'; }
+  catch (e) {
+    if (e.name === 'AbortError') return null;
+    // retry without the optional hints in case this browser rejects one of them
+    try { return await showSaveFilePicker({ suggestedName: name }); }
+    catch (e2) { if (e2.name === 'AbortError') return null; alert(`The save dialog couldn’t open (${e2.message}), so the file will go to Downloads.`); return 'download'; }
+  }
 }
 async function saveTo(target, blob, name) {
   if (target === 'download') return download(blob, name);
