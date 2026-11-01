@@ -1,6 +1,6 @@
 // Offline support: the page itself is fetched network-first (so updates show up when online),
 // everything else is served from the cache first. Bump CACHE when vendor files change.
-const CACHE = 'illuminate3d-v20';
+const CACHE = 'illuminate3d-v21';
 const ASSETS = [
   './',
   './index.html',
