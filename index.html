@@ -77,7 +77,7 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .ctl .lim { display: block; font-size: 10px; color: var(--accent); }
 .ctl .lim { cursor: help; }
 .ctl .lim .warn { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: 4px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800; vertical-align: 1px; }
-#tipbox { position: fixed; z-index: 30; max-width: 260px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 12px; line-height: 1.4; pointer-events: none; display: none; }
+#tipbox { position: fixed; z-index: 30; max-width: 300px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 12px; line-height: 1.4; pointer-events: none; display: none; }
 .ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=number], select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
@@ -109,9 +109,20 @@ footer { border-top: 1px solid var(--line); padding: 10px 16px 14px; }
 main { position: relative; background: var(--view); min-width: 0; }
 main canvas { display: block; width: 100%; height: 100%; }
 #toolbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
-#toolbar button { border: 0; background: transparent; color: var(--text); padding: 6px 10px; border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#toolbar button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#toolbar button:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
 #toolbar button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+#toolbar button.icon { padding: 6px 7px; }
+#toolbar button:disabled { opacity: .35; cursor: default; }
+#toolbar button svg { flex: none; }
 #toolbar button[hidden] { display: none; }
+@media (max-width: 1320px) { #toolbar button span { display: none; } #toolbar button { padding: 6px 8px; } }
+#viewpad { position: absolute; right: 14px; bottom: 12px; display: grid; grid-template-areas: ". t . i" "l f r k" ". b . ."; grid-template-columns: repeat(4, 46px); gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#viewpad button { border: 0; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 10.5px; padding: 4px 0; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+#viewpad button:hover { color: var(--accent); background: var(--accent-soft); }
+.info { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 5px; border-radius: 50%; border: 1px solid currentColor; color: var(--muted); font: italic 700 9px/1 Georgia, serif; vertical-align: 1px; cursor: help; text-transform: none; letter-spacing: 0; opacity: .8; }
+.info:hover { color: var(--accent); opacity: 1; }
+.info[hidden] { display: none; }
 .tbsep { width: 1px; background: var(--line); margin: 4px 2px; }
 #dims { position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 #busy { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.25); color: #fff; font-weight: 600; font-size: 14px; }
@@ -140,8 +151,6 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button id="fOpen" title="Open a saved project (⌘O)">Open…</button>
       <button id="fSave" title="Save (⌘S)">Save</button>
       <button id="fSaveAs" title="Save a copy under a new name">Save as…</button>
-      <button id="fUndo" class="icon" title="Undo (⌘Z)" aria-label="Undo" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-      <button id="fRedo" class="icon" title="Redo (⇧⌘Z)" aria-label="Redo" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
     </div>
     <nav id="tabs">
       <button data-tab="shape" class="on">Shape</button>
@@ -166,16 +175,27 @@ main canvas { display: block; width: 100%; height: 100%; }
   </aside>
   <main id="view">
     <div id="toolbar">
-      <button id="tbShade" class="on" title="Show or hide the shade">Shade</button>
-      <button id="tbBase" class="on" title="Show or hide the base">Base</button>
-      <button id="tbHw" class="on" title="Show or hide the socket, bulb or puck">Hardware</button>
-      <button id="tbCover" class="on" title="Show or hide the bottom cover" hidden>Cover</button>
+      <button id="fUndo" class="icon" title="Undo (⌘Z)" aria-label="Undo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="fRedo" class="icon" title="Redo (⇧⌘Z)" aria-label="Redo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="tbsep"></span>
-      <button id="tbOver" class="on">Overhangs</button>
-      <button id="tbCut">Cutaway</button>
-      <button id="tbExplode">Explode</button>
-      <button id="tbLight">Light on</button>
-      <button id="tbReset">Reset view</button>
+      <button id="tbShade" class="on" title="Show or hide the shade"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8l4 10H4L8 2Z"/><path d="M12 12v6"/><path d="M8 22v-2c0-1.1.9-2 2-2h4a2 2 0 0 1 2 2v2H8Z"/></svg><span>Shade</span></button>
+      <button id="tbBase" class="on" title="Show or hide the base"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/></svg><span>Base</span></button>
+      <button id="tbHw" class="on" title="Show or hide the socket, bulb or puck"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></svg><span>Hardware</span></button>
+      <button id="tbCover" class="on" title="Show or hide the bottom cover" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg><span>Cover</span></button>
+      <span class="tbsep"></span>
+      <button id="tbOver" class="on" title="Highlight walls steeper than your overhang limit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Overhangs</span></button>
+      <button id="tbCut" title="Cut the model in half to see inside"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg><span>Cutaway</span></button>
+      <button id="tbExplode" title="Pull the parts apart"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg><span>Explode</span></button>
+      <button id="tbLight" title="Preview the lamp switched on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span>Light</span></button>
+    </div>
+    <div id="viewpad" aria-label="Standard views">
+      <button data-view="top" style="grid-area:t" title="Top view">Top</button>
+      <button data-view="left" style="grid-area:l" title="Left view">Left</button>
+      <button data-view="front" style="grid-area:f" title="Front view">Front</button>
+      <button data-view="right" style="grid-area:r" title="Right view">Right</button>
+      <button data-view="back" style="grid-area:k" title="Back view">Back</button>
+      <button data-view="bottom" style="grid-area:b" title="Bottom view">Bottom</button>
+      <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg></button>
     </div>
     <div id="dims"></div>
     <div id="busy">Loading geometry engine…</div>
@@ -1016,6 +1036,27 @@ function updateUndoButtons() {
   document.getElementById('fUndo').disabled = hi <= 0;
   document.getElementById('fRedo').disabled = hi >= hist.length - 1;
 }
+const VIEWS = { front: [0, 0, 1], back: [0, 0, -1], right: [1, 0, 0], left: [-1, 0, 0], top: [0, 1, 0.0001], bottom: [0, -1, 0.0001], iso: [0.55, 0.35, 0.76] };
+let viewAnim = 0;
+function setView(name) {
+  if (!lastStats) return;
+  const bb = lastStats.bb, ctr = bb.getCenter(new THREE.Vector3()), r = bb.getSize(new THREE.Vector3()).length() / 2;
+  const dist = r / Math.sin(camera.fov * DEG / 2) * 1.05;
+  const to = new THREE.Vector3(...VIEWS[name]).normalize().multiplyScalar(dist).add(ctr);
+  const from = camera.position.clone(), t0 = controls.target.clone(), id = ++viewAnim, start = performance.now();
+  camera.near = dist / 50; camera.far = dist * 20; camera.updateProjectionMatrix();
+  const step = now => {
+    if (id !== viewAnim) return;
+    const k = document.hidden ? 1 : Math.min(1, (now - start) / 260), e = k * k * (3 - 2 * k);
+    controls.target.lerpVectors(t0, ctr, e);
+    // swing around the target rather than straight through it
+    const a = from.clone().sub(t0), b = to.clone().sub(ctr), len = a.length() + (b.length() - a.length()) * e;
+    camera.position.copy(a.normalize().lerp(b.normalize(), e).normalize().multiplyScalar(len).add(controls.target));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  if (document.hidden) step(start + 1e6); else requestAnimationFrame(step);
+}
+document.getElementById('viewpad').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
 function frame(bb) {
   const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
   const r = size.length() / 2;
@@ -1133,7 +1174,14 @@ function refreshAll() { for (const c of controlsList) { if (c.when) c.el.hidden 
 function changed(key, v, structural) { setK(key, v); if (intent && key in LIMITS) intent[key] = v; sideEffects(key); if (structural) refreshAll(); invalidate(); }
 
 function h3(parent, text, when) { const e = document.createElement('h3'); e.textContent = text; parent.append(e); return reg(e, when); }
-function note(parent, text, when) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
+// Notes show as a small ⓘ next to the setting (or heading) just above them; the text appears on hover.
+function note(parent, text, when) {
+  const prev = parent.lastElementChild;
+  const host = prev?.matches('.ctl') ? prev.querySelector('label') : prev?.matches('h3') ? prev : null;
+  if (!host) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
+  const e = document.createElement('span'); e.className = 'info'; e.textContent = 'i'; e.dataset.tip = text; e.dataset.html = '1';
+  host.append(e); return reg(e, when);
+}
 function slider(parent, label, key, min, max, step, unit = '', when) {
   const row = document.createElement('div'); row.className = 'ctl';
   row.innerHTML = `<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
@@ -1146,7 +1194,8 @@ function slider(parent, label, key, min, max, step, unit = '', when) {
       const atMin = lim[0] > min && v <= lo + 0.01, atMax = lim[1] < max && v >= hi - 0.01;
       const tip = (atMin ? 'At its minimum: ' : atMax ? 'At its maximum: ' : 'Limited because ') + lim[2];
       const tags = [lim[0] > min ? `min ${fmt(lo)}` : '', atMax ? `max ${fmt(hi)}` : ''].filter(Boolean).join(' · ');
-      lab.textContent = label;
+      const infos = [...lab.querySelectorAll('.info')];
+      lab.textContent = label; lab.append(...infos);
       if (tags) {
         const sm = document.createElement('small'); sm.className = 'lim'; sm.dataset.tip = tip; sm.textContent = tags;
         if (atMin || atMax) { const b = document.createElement('b'); b.className = 'warn'; b.textContent = '!'; sm.append(b); }
@@ -1290,10 +1339,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
 
   h3(p, 'Light source', () => twistOn() || ringOn());
   segmented(p, 'Type', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, tableBase);
+  note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once its top edge pokes out, pull it up, turn it flat, and it rests around the slot in a shallow seat.', slotOn);
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
   slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
-  note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once its top edge pokes out, pull it up, turn it flat, and it rests around the slot in a shallow seat.', slotOn);
   segmented(p, 'Under the slot', 'slotStyle', { straight: 'Straight (low base)', funnel: 'Finger funnel' }, slotOn);
   slider(p, 'Puck Ø', 'slotD', 15, 80, 0.5, 'mm', slotOn);
   slider(p, 'Puck thickness', 'slotH', 2, 20, 0.1, 'mm', slotOn);
@@ -1322,8 +1371,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
 
   h3(p, 'Base', twistOn);
-  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
   note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
+  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
   slider(p, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
   slider(p, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
   slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
@@ -1383,7 +1432,6 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
 tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbCover', 'cover'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
-document.getElementById('tbReset').onclick = () => { if (lastStats) frame(lastStats.bb); };
 
 function randomize() {
   const pick = a => a[Math.floor(Math.random() * a.length)], rr = (a, b) => a + Math.random() * (b - a);
@@ -1518,7 +1566,8 @@ document.getElementById('fUndo').onclick = undo;
 // hover (or tap) a "min …" tag to see why the limit is there
 const tipbox = document.getElementById('tipbox');
 function showTip(el) {
-  tipbox.textContent = el.dataset.tip; tipbox.style.display = 'block';
+  if (el.dataset.html) tipbox.innerHTML = el.dataset.tip; else tipbox.textContent = el.dataset.tip;
+  tipbox.style.display = 'block';
   const r = el.getBoundingClientRect(), w = tipbox.offsetWidth;
   tipbox.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
   tipbox.style.top = (r.bottom + 6) + 'px';
