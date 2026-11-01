@@ -1558,9 +1558,9 @@ function saveProject(asNew) {
   cur = { id, name, snap: designJSON() };
   persistCur(); updateTitle(); toast(`Saved “${name}”`);
 }
-function exportJSON(name, data) {
-  const file = (name || 'lamp').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lamp';
-  download(new Blob([JSON.stringify({ app: 'Illuminate3D', version: 1, name, data }, null, 1)], { type: 'application/json' }), file + '.json');
+async function exportJSON(name, data) {
+  const file = slug(name) + '.json', target = await pickTarget(file, 'json');
+  if (target) await saveTo(target, new Blob([JSON.stringify({ app: 'Illuminate3D', version: 1, name, data }, null, 1)], { type: 'application/json' }), file);
 }
 async function importJSON(f) {
   if (!f || !confirmDiscard()) return;
@@ -1636,6 +1636,20 @@ document.addEventListener('click', e => { const el = e.target.closest?.('[data-t
 document.getElementById('fRedo').onclick = redo;
 
 // ---------------------------------------------------------------- export
+// Saving: where the browser supports it (Chrome, Edge) a save dialog asks for the folder and name first — it remembers
+// the last folder per kind of file. Elsewhere (Safari) the file goes to the browser's download location.
+const slug = n => (n || 'lamp').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lamp';
+async function pickTarget(name, kind) {   // returns a file handle, 'download', or null if the user cancelled
+  if (!window.showSaveFilePicker) return 'download';
+  const types = kind === 'stl' ? [{ description: 'STL model', accept: { 'model/stl': ['.stl'] } }] : [{ description: 'Illuminate3D design', accept: { 'application/json': ['.json'] } }];
+  try { return await showSaveFilePicker({ suggestedName: name, types, id: 'illuminate3d-' + kind }); }
+  catch (e) { if (e.name === 'AbortError') return null; console.warn(e); return 'download'; }
+}
+async function saveTo(target, blob, name) {
+  if (target === 'download') return download(blob, name);
+  const w = await target.createWritable(); await w.write(blob); await w.close();
+  toast(`Saved ${target.name}`);
+}
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
 function stlBlob(mesh) {
   const v = mesh.vertProperties, t = mesh.triVerts, np = mesh.numProp, nt = t.length / 3;
@@ -1667,6 +1681,8 @@ function buildPart(name, q) {   // watertight part in print orientation
 }
 async function exportPlate() {
   if (!W) return;
+  const name = slug(cur.name) + '-plate.stl', target = await pickTarget(name, 'stl');   // ask first, while the click still counts
+  if (!target) return;
   busy.textContent = 'Laying out the print plate…'; busy.classList.add('on');
   await new Promise(r => setTimeout(r, 30));
   try {
@@ -1684,12 +1700,15 @@ async function exportPlate() {
       const placed = mans.map((m, i) => keep(m.translate([pos[i][0], pos[i][1], -boxes[i].min[2]])));
       return stlBlob(keep(W.Manifold.compose(placed)).getMesh());
     });
-    download(blob, 'lamp-print-plate.stl');
+    await saveTo(target, blob, name);
   } catch (e) { console.error(e); alert('Plate export failed: ' + e.message); }
   busy.classList.remove('on');
 }
 async function runExport(which) {
   if (!W) return;
+  const part = which === 'base' && baseDims().adapter ? 'adapter' : which;
+  const name = `${slug(cur.name)}-${part}.stl`, target = await pickTarget(name, 'stl');
+  if (!target) return;
   busy.textContent = 'Building watertight mesh…'; busy.classList.add('on');
   await new Promise(r => setTimeout(r, 30));
   try {
@@ -1699,8 +1718,7 @@ async function runExport(which) {
       if (man.status() !== 'NoError' || man.isEmpty()) throw new Error('Mesh error: ' + man.status());
       return stlBlob(man.getMesh());
     });
-    const B = baseDims();
-    download(blob, which === 'shade' ? 'lamp-shade.stl' : which === 'cover' ? 'lamp-cover.stl' : (B.adapter ? 'lamp-adapter.stl' : 'lamp-base.stl'));
+    await saveTo(target, blob, name);
   } catch (e) { console.error(e); alert('Export failed: ' + e.message + '\nTry reducing pattern depth or increasing wall thickness.'); }
   busy.classList.remove('on');
 }
