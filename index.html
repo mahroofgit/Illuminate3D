@@ -136,6 +136,12 @@ main canvas { display: block; width: 100%; height: 100%; }
 .info:hover { color: var(--accent); opacity: 1; }
 .info[hidden] { display: none; }
 .tbsep { width: 1px; background: var(--line); margin: 4px 2px; }
+#secbar { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px; font-size: 12px; color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#secbar[hidden] { display: none; }
+#secbar input { width: 180px; accent-color: var(--accent); }
+#secbar output { min-width: 38px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+#secbar button { border: 0; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 11px; padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+#secbar button:hover { color: var(--accent); background: var(--accent-soft); }
 #dims { position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 #busy { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.25); color: #fff; font-weight: 600; font-size: 14px; }
 #busy.on { display: grid; }
@@ -199,7 +205,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button id="tbCover" class="on" title="Show or hide the bottom cover" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg><span>Cover</span></button>
       <span class="tbsep"></span>
       <button id="tbOver" class="on" title="Highlight walls steeper than your overhang limit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Overhangs</span></button>
-      <button id="tbCut" title="Cut the model in half to see inside"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg><span>Cutaway</span></button>
+      <button id="tbCut" title="Cut the model in half to see inside (section view)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg><span>Section</span></button>
       <button id="tbExplode" title="Pull the parts apart"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg><span>Explode</span></button>
       <button id="tbLight" title="Preview the lamp switched on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span>Light</span></button>
     </div>
@@ -212,6 +218,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button data-view="bottom" style="grid-area:b" title="Bottom view">Bottom</button>
       <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg></button>
     </div>
+    <div id="secbar" hidden><span>Section angle</span><input id="secAng" type="range" min="-180" max="180" step="1" value="0" aria-label="Section angle"><output id="secOut">0°</output><button id="secZero" title="Back to the front section">Reset</button></div>
     <div id="dims"></div>
     <div id="busy">Loading geometry engine…</div>
     <div id="toast"></div>
@@ -741,11 +748,18 @@ function skirtSolid(S) {
 function detentGeom() {
   if (!P.detent || P.mount !== 'twist') return null;
   const Ri = P.collarD / 2, Ro = Ri + P.collarWall, c = P.clearance, boreR = Ro + c;
-  const z0 = P.lugH + c + P.lugDepth + c + 0.6, z1 = P.collarH - 1.2;   // above the groove roof, below the bore top
-  if (z1 - z0 < 2.5) return null;
   const fit = P.detentFit, rr = 1, d = fit + 0.05;   // rib radius; collar recess depth (0.05 mm clear when seated)
   const rc = boreR + rr - (c + fit);                 // rib centre: its inner edge sits `fit` mm inside the collar's face
-  const off = 180 / P.lugs, angs = Array.from({ length: P.lugs }, (_, k) => k * 360 / P.lugs + off);
+  const pitch = 360 / P.lugs;
+  // Preferred: in the plain wall between one lug's groove and the next lug's entry channel, where nothing is cut, so the
+  // rib can run from the floor almost to the top. Otherwise above the groove roofs, if the collar is tall enough.
+  const free = pitch - P.lugW - P.turn, ribA = (2 * (rr + 0.15) / Ro) / DEG + 2;
+  let z0, off;
+  if (free >= ribA) { z0 = 0.6; off = (pitch - P.turn) / 2; }
+  else { z0 = P.lugH + c + P.lugDepth + c + 0.6; off = pitch / 2; }
+  const z1 = Math.min(P.collarH - 1.2, z0 + 5);   // below the bore top; at most 5 mm tall so the click stays light
+  if (z1 - z0 < 2) return null;
+  const angs = Array.from({ length: P.lugs }, (_, k) => k * pitch + off);
   return { z0, z1, fit, rr, d, rc, Ro, angs, hump: (2.5 / Ro) / DEG };
 }
 function collarDetentCuts(seg) {
@@ -1210,7 +1224,7 @@ assembly.add(bulbLight);
 const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
 const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
 const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.FrontSide });
-// Cutaway caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
+// Section-view caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
 // polygonOffset pulls the section caps forward so they win over faces that touch them (collar on the shade, collar on the base floor)
 const capOpts = { side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
 const capShadeMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xe8893a, side: THREE.BackSide });
@@ -1221,7 +1235,7 @@ const tapeMat = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: t
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
-const view3 = { over: true, cut: false, explode: false, light: false, shade: true, base: true, hw: true, cover: true };
+const view3 = { over: true, cut: false, cutAngle: 0, explode: false, light: false, shade: true, base: true, hw: true, cover: true };
 let firstFrame = true;
 
 function resize() { const r = view.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); }
@@ -1233,7 +1247,10 @@ renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, came
 function addCap(parent, geo, cap) { const m = new THREE.Mesh(geo, cap); m.userData.cap = true; m.visible = view3.cut; parent.add(m); }
 function addSolid(g, geo, mat, cap) { g.add(new THREE.Mesh(geo, mat)); addCap(g, geo, cap); }
 function applyCut() {
-  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)] : [];
+  // the section plane is vertical through the lamp axis; the angle swings it around the axis (0° = facing the front view)
+  const a = view3.cutAngle * DEG;
+  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a)), 0)] : [];
+  document.getElementById('secbar').hidden = !view3.cut;
   assembly.traverse(o => { if (o.userData.cap) o.visible = view3.cut; });
 }
 function clearGroup(g) { for (const c of [...g.children]) { if (c.isLight) continue; g.remove(c); c.geometry?.dispose(); } }
@@ -1931,7 +1948,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
   toggleRow(p, 'Click detent', 'detent', twistOn);
   note(p, 'Small vertical ribs on the base’s inner wall click into matching grooves on the collar at the end of the turn. The collar has a relief track for the rest of the turn, so it only clicks at the end and turns freely otherwise.', twistOn);
-  slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent);
+  note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
+  slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
 }
 
 // Print tab
@@ -2009,6 +2027,12 @@ function focusConnector() {
 
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
+{
+  const ang = document.getElementById('secAng'), out = document.getElementById('secOut');
+  const setAng = v => { view3.cutAngle = v; ang.value = v; out.textContent = v + '°'; applyCut(); };
+  ang.addEventListener('input', () => setAng(+ang.value));
+  document.getElementById('secZero').addEventListener('click', () => setAng(0));
+}
 tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbCover', 'cover'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
 
 function randomize() {

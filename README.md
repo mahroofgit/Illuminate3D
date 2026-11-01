@@ -21,7 +21,7 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
 - **Export** – each part as its own STL, or **Export print plate**: shade, base and cover laid out together on your printer's bed, oriented for printing, in one STL.
 - **Projects** – New / Open / Save / Save as (⌘S, ⌘O), undo / redo (⌘Z, ⇧⌘Z), with thumbnails, stored in the browser; export and import `.json` files to back up or move designs.
 - Collapsible setting groups.
-- Viewer with solid-section cutaway, exploded view, lamp-on preview, and toggles to show or hide the shade, base and hardware.
+- Viewer with a solid section view (turnable around the axis), exploded view, lamp-on preview, and toggles to show or hide the shade, base and hardware.
 
 ## Printing tips
 
