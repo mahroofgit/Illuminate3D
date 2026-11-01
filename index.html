@@ -283,7 +283,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'cone', diffT: 0.8, diffGap: 6, diffVent: 0, coverFit: 0.1,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'cone', diffT: 0.8, diffGap: 6, diffVent: 0, diffChamfer: 3, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -569,6 +569,14 @@ function diffuserSolid(S, seg) {
   const Rb = g.rAtt + 2 * Math.max(P.wall, P.collarWall) + 2;
   let sheet = g.flat ? tr(cyl(P.diffT, Rb, Rb, seg), 0, 0, g.zLow)
     : revolve([[0, g.zTop - g.tv], [Rb, g.zTop - g.tv - Rb * g.t], [Rb, g.zTop - Rb * g.t], [0, g.zTop]], 360, seg);
+  if (g.flat && P.diffChamfer > 0) {   // 45° fillet ring under the rim, trimmed by the shade wall and kept clear of the puck
+    const r0 = g.rAtt - P.diffChamfer, h = Rb - r0 + 1;
+    let ring = revolve([[r0, g.zLow + 0.01], [Rb, g.zLow - h], [Rb, g.zLow + 0.01]], 360, seg);
+    const zMin = puckTopZ(baseDims()) + 0.5;
+    if (zMin < g.zLow) ring = ring.intersect(tr(cyl(g.zLow + 1 - zMin, Rb + 1, Rb + 1, seg), 0, 0, zMin));
+    else ring = null;
+    if (ring) sheet = uni([sheet, ring]);
+  }
   if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // vent hole
   return keep(sheet.intersect(inside));
 }
@@ -955,14 +963,21 @@ function update() {
   geo.computeVertexNormals();
   const ov = analyse(S, geo);
   clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup); clearGroup(coverGroup);
-  addSolid(shadeGroup, geo, shadeMat, capShadeMat);
   connMat.color.set(P.color); baseMat.color.set(P.baseColor);
+  // in the cutaway the shade and connector are merged into one solid, so the section shows no seams where they overlap
+  const merged = view3.cut && W && P.mount !== 'none';
+  if (!merged) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
 
   let connVol = 0, baseVol = 0, baseBox = null;
   const B = baseDims();
   if (W) gcScope(() => {
-    const c = shadeConnector(S, 96, 0);
-    if (c) { addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat); connVol = c.volume(); }
+    const c = shadeConnector(S, 96, merged ? 0.4 : 0);
+    if (c && merged) {
+      const body = new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx }));
+      addSolid(shadeGroup, manifoldToGeo(body.add(c)), connMat, capShadeMat);
+    } else if (merged) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
+    else if (c) addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat);
+    if (c) connVol = c.volume();
     if (P.mount === 'twist') { const b = buildBase(96); addSolid(baseGroup, manifoldToGeo(b), baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox(); }
     if (P.mount === 'twist' && coverActive(B)) {
       addSolid(coverGroup, manifoldToGeo(buildCover(96)), baseMat, capBaseMat);
@@ -1046,7 +1061,7 @@ function update() {
     if (diffuserOn()) {
       const g = diffuserGeom(S), ok = g.zTop <= S.zEnd - 2;
       checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(g.zLow - puckTopZ(B))} mm above the puck${P.diffVent > 0 ? `, Ø${fmt(P.diffVent)} vent` : ''}` : `The diffuser would poke out of the top — lower the gap or use a taller shade`]);
-      if (ok && g.flat) checks.push([false, `Flat diffuser spans Ø${(2 * g.rAtt).toFixed(0)} mm — turn on supports under it in your slicer`]);
+      if (ok && g.flat) checks.push([false, `Flat diffuser spans Ø${(2 * Math.max(0, g.rAtt - P.diffChamfer)).toFixed(0)} mm — turn on supports under it in your slicer`]);
     }
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
@@ -1452,10 +1467,11 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
   const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
   toggleRow(p, 'Diffuser', 'diffuser', difOn);
-  note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under it. Thinner lets more light through; a vent hole lets heat out.', difOn);
+  note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under its middle; the 45° rim chamfer joins it to the wall and shortens the span. Thinner lets more light through; a vent hole lets heat out.', difOn);
   segmented(p, 'Diffuser shape', 'diffStyle', { cone: 'Cone (no supports)', flat: 'Flat (supports)' }, difSet);
   slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', difSet);
   slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', difSet);
+  slider(p, 'Rim chamfer', 'diffChamfer', 0, 15, 0.5, 'mm', () => difSet() && P.diffStyle === 'flat');
   slider(p, 'Vent hole Ø', 'diffVent', 0, 30, 0.5, 'mm', difSet);
   select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
   slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
