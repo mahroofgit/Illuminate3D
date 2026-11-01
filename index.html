@@ -112,7 +112,16 @@ input[type=number] { text-align: right; padding-right: 4px; }
 .hint { color: var(--muted); font-size: 11px; padding: 0 10px 8px; }
 .note { color: var(--muted); font-size: 12px; margin: 6px 0; }
 footer { border-top: 1px solid var(--line); padding: 10px 16px 14px; }
-#checks { list-style: none; margin: 0 0 10px; padding: 0; font-size: 12px; }
+#checkPanel { position: absolute; top: 60px; right: 14px; width: 290px; max-height: calc(100% - 150px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.08); z-index: 2; }
+#checkPanel[hidden] { display: none; }
+#checkPanel header { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+#checkPanel header button { border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+#checkPanel header button:hover { color: var(--text); }
+#tbChecks { position: relative; }
+#tbChecks .badge { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--warn); color: #fff; font-size: 9.5px; font-weight: 800; line-height: 15px; text-align: center; font-style: normal; }
+#tbChecks .badge[hidden] { display: none; }
+@media (max-width: 1100px) { #checkPanel { width: 240px; } #secbar input { width: 110px; } #secbar > span { display: none; } }
+#checks { list-style: none; margin: 0; padding: 0; font-size: 12px; }
 #checks li { display: flex; gap: 6px; padding: 2px 0; }
 #checks li b { width: 14px; flex: none; }
 #checks li.ok b { color: var(--ok); } #checks li.bad b { color: var(--warn); }
@@ -136,7 +145,7 @@ main canvas { display: block; width: 100%; height: 100%; }
 .info:hover { color: var(--accent); opacity: 1; }
 .info[hidden] { display: none; }
 .tbsep { width: 1px; background: var(--line); margin: 4px 2px; }
-#secbar { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px; font-size: 12px; color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#secbar { position: absolute; top: 60px; left: 14px; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px; font-size: 12px; color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
 #secbar[hidden] { display: none; }
 #secbar input { width: 180px; accent-color: var(--accent); }
 #secbar output { min-width: 38px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -183,7 +192,6 @@ main canvas { display: block; width: 100%; height: 100%; }
       <div class="panel" id="p-print"></div>
     </div>
     <footer>
-      <ul id="checks"></ul>
       <div class="exports">
         <button class="btn primary" id="expPlate" title="All parts laid out side by side on your printer’s bed, oriented for printing, in one STL"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><circle cx="7.5" cy="14" r="2.5"/><rect x="12" y="11" width="7" height="6" rx="1"/><path d="M12 3v4M8 5l4 2 4-2"/></svg><span>Export print plate</span></button>
         <div class="exprow">
@@ -208,6 +216,8 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button id="tbCut" title="Cut the model in half to see inside (section view)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg><span>Section</span></button>
       <button id="tbExplode" title="Pull the parts apart"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6M12 8V2M4 12H2M10 12H8M16 12h-2M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg><span>Explode</span></button>
       <button id="tbLight" title="Preview the lamp switched on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span>Light</span></button>
+      <span class="tbsep"></span>
+      <button id="tbChecks" title="Show or hide the design checks"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg><span>Checks</span><em class="badge" id="chkBadge" hidden></em></button>
     </div>
     <div id="viewpad" aria-label="Standard views">
       <button data-view="top" style="grid-area:t" title="Top view">Top</button>
@@ -218,6 +228,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button data-view="bottom" style="grid-area:b" title="Bottom view">Bottom</button>
       <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg></button>
     </div>
+    <section id="checkPanel" aria-label="Design checks"><header><span>Checks</span><button id="cpClose" title="Hide checks" aria-label="Hide checks">×</button></header><ul id="checks"></ul></section>
     <div id="secbar" hidden><span>Section angle</span><input id="secAng" type="range" min="-180" max="180" step="1" value="0" aria-label="Section angle"><output id="secOut">0°</output><button id="secZero" title="Back to the front section">Reset</button></div>
     <div id="dims"></div>
     <div id="busy">Loading geometry engine…</div>
@@ -1647,8 +1658,27 @@ function invalidate() { if (pending) return; pending = true; requestAnimationFra
 let saveT = 0;
 function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', designJSON()); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
 
+// Checks live in a panel on the right of the view that the toolbar's Checks button shows and hides (remembered per
+// browser). Settings held at a limit (the "!" next to a slider) are listed too; while the panel is hidden, the button
+// carries a badge with the number of problems.
+let lastBad = 0, checksOpen = innerWidth > 1100;
+try { const v = localStorage.getItem('illum.checksOpen'); if (v !== null) checksOpen = v === '1'; } catch (e) { /* storage unavailable */ }
+function updateCheckBadge() {
+  const b = document.getElementById('chkBadge');
+  b.textContent = lastBad; b.hidden = checksOpen || !lastBad;
+  document.getElementById('checkPanel').hidden = !checksOpen;
+  document.getElementById('tbChecks').classList.toggle('on', checksOpen);
+}
+function setChecksOpen(on) { checksOpen = on; try { localStorage.setItem('illum.checksOpen', on ? '1' : '0'); } catch (e) { /* storage unavailable */ } updateCheckBadge(); }
+document.getElementById('tbChecks').addEventListener('click', () => setChecksOpen(!checksOpen));
+document.getElementById('cpClose').addEventListener('click', () => setChecksOpen(false));
 function renderChecks(list) {
+  const atLimit = [...document.querySelectorAll('.panel .ctl .lim .warn')].filter(w => !w.closest('[hidden]'))
+    .map(w => w.closest('.ctl').querySelector('label').firstChild.textContent.trim());
+  if (atLimit.length) list = [...list, [false, `${atLimit.length === 1 ? `${atLimit[0]} is` : `${atLimit.length} settings are`} held at a limit (marked !) — hover the “min/max” note for why`]];
   document.getElementById('checks').innerHTML = list.map(([ok, txt]) => `<li class="${ok ? 'ok' : 'bad'}"><b>${ok ? '✓' : '!'}</b><span>${txt}</span></li>`).join('');
+  lastBad = list.filter(([ok]) => !ok).length;
+  updateCheckBadge();
 }
 
 // ---------------------------------------------------------------- profile editor
@@ -1945,13 +1975,15 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   segmented(p, 'Lamp type', 'orient', { table: 'Table / floor', pendant: 'Pendant' });
   segmented(p, 'Connection', 'mount', { twist: 'Twist-lock', ring: 'Socket ring', none: 'None' });
   note(p, '<b>Twist-lock</b>: the shade gets a collar with lugs that bayonet into a separate base or socket adapter — twist to lock, no tools. <b>Socket ring</b>: the shade clamps directly onto a lamp holder with its threaded shade ring.', () => P.mount !== 'none');
+  segmented(p, 'Twist onto', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
+  note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
 
   const tableBase = () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant');
   const holderOn = () => ringOn() || socketInsert();
   const puckOn = () => twistOn() && !socketInsert() && P.insert === 'puck';
   const slotOn = () => twistOn() && !socketInsert() && P.insert === 'slot';
 
-  h3(p, 'Light source', () => twistOn() || ringOn());
+  h3(p, 'Lamp hardware', () => twistOn() || ringOn());
   presetRow(p, tableBase);
   segmented(p, 'Type', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, tableBase);
   note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once its top edge pokes out, pull it up, turn it flat, and it rests around the slot in a shallow seat.', slotOn);
@@ -1968,78 +2000,18 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'How far the funnel’s opening reaches past the puck’s edge, so your fingertips can get around it. The funnel narrows at 45° from that opening up to the slot, so every 1 mm less room makes the funnel — and the minimum base height — 1 mm lower. With a bottom cover, the cover gets smaller too.', () => slotOn() && P.slotStyle === 'funnel');
   slider(p, 'Lift puck', 'puckLift', 0, 45, 0.5, 'mm', () => puckOn() || slotOn());
   note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
-  const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
-  toggleRow(p, 'Diffuser', 'diffuser', difOn);
-  note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under its middle; the 45° rim chamfer joins it to the wall and shortens the span. Thinner lets more light through; a vent hole lets heat out.', difOn);
-  segmented(p, 'Diffuser shape', 'diffStyle', { flat: 'Flat (supports)', cone: 'Cone (no supports)' }, difSet);
-  slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', difSet);
-  slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', difSet);
-  slider(p, 'Rim chamfer', 'diffChamfer', 0, 15, 0.5, 'mm', () => difSet() && P.diffStyle === 'flat');
   select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
   slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
   slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', holderOn);
   note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', holderOn);
-
-  h3(p, 'Ventilation', () => slotOn() || difSet());
-  note(p, 'Keeps the puck cool for long use: air comes in through the side intakes, passes under the raised puck, rises past its edge through two notches at the slot ends, and leaves through the diffuser’s vent hole.', () => slotOn());
-  segmented(p, 'Under the puck', 'underPuck', { flat: 'Flat', tape: 'Tape strips', ribs: 'Raiser ribs' }, slotOn);
-  note(p, 'Lifts the puck off the seat so air can pass under it. <b>Tape strips</b>: two strips of gel tape on the ledges beside the slot (shown in light blue, not exported). <b>Raiser ribs</b>: two printed ribs in the same place. Either way the seat is cut deeper by the gap so the puck stays flush, and two notches at the slot ends let the air rise past its edge.', slotOn);
-  slider(p, 'Gap under puck', 'underGap', 0.6, 4, 0.1, 'mm', () => slotOn() && P.underPuck !== 'flat');
-  toggleRow(p, 'Side air intakes', 'intake', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
-  note(p, 'Holes drilled up and inward from low on the base’s side into the space under the puck, so air gets in even with the base flat on the table and the bottom cover on. They slope upward, so you can’t see through them from the side. Pair them with a gap under the puck and a diffuser vent hole so warm air can flow out the top.', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
-  slider(p, 'Intake holes', 'intakeN', 2, 6, 1, '', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
-  slider(p, 'Intake hole Ø', 'intakeD', 2, 8, 0.5, 'mm', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
-  segmented(p, 'Diffuser vent', 'diffVentStyle', { center: 'Center hole', edge: 'Edge cuts' }, difSet);
-  note(p, '<b>Center hole</b>: one round hole in the middle, right over the puck. <b>Edge cuts</b>: square cuts through the diffuser and its rim chamfer, against the shade wall, so warm air rises along the wall and no bright spot shows through the middle. The shade wall itself is never cut.', difSet);
-  slider(p, 'Diffuser vent Ø', 'diffVent', 0, 30, 0.5, 'mm', () => difSet() && P.diffVentStyle !== 'edge');
-  slider(p, 'Edge cut size', 'diffVent', 0, 15, 0.5, 'mm', () => difSet() && P.diffVentStyle === 'edge');
-  slider(p, 'Edge cuts', 'diffVentN', 2, 8, 1, '', () => difSet() && P.diffVentStyle === 'edge');
+  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
   slider(p, 'Spokes', 'spokes', 2, 8, 1, '', () => ringOn() && P.ringStyle === 'spokes');
   slider(p, 'Spoke width', 'spokeW', 3, 16, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
   slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
-
-  h3(p, 'Base', twistOn);
-  note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
-  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
-  slider(p, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
-  slider(p, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
-  slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
-  slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
-  note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
-  toggleRow(p, 'Shade skirt', 'skirt', tableBase);
-  slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt);
-  note(p, 'A flat plate runs from the collar top straight out to the skirt, and the skirt itself is the shade’s wall down to it. The plate prints as a bridge from the collar to the skirt; turn on supports there if your printer bridges poorly.', () => tableBase() && P.skirt);
-  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', () => tableBase() && P.skirt);
-  note(p, 'A 45° fillet under the plate, in the corner where it meets the skirt’s wall: it shortens the plate’s bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the skirt hugs the neck. 0 turns it off.', () => tableBase() && P.skirt);
-  slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
-  note(p, 'Webs under the plate, from the bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the skirt for twisting.', () => tableBase() && P.skirt);
-  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
-  note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
-  const styledOn = () => tableBase() && P.baseStyle !== 'plain';
-  segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
-  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
-  slider(p, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
-  slider(p, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
-  slider(p, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
-  const anyPat = () => Object.values(P.pat).some(q => q.on);
-  toggleRow(p, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
-  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
-  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
-
-  h3(p, 'Cable & cover', tableBase);
-  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
-  slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
-  toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
-  note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
-  toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
-  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
-  slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
-  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
-  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
 
   h3(p, 'Twist lock', twistOn);
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
@@ -2058,6 +2030,68 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
   note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
   slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
+
+  h3(p, 'Base', tableBase);
+  slider(p, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
+  slider(p, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
+  slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
+  slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
+  note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
+  const styledOn = () => tableBase() && P.baseStyle !== 'plain';
+  segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
+  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
+  slider(p, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
+  slider(p, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
+  slider(p, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
+  const anyPat = () => Object.values(P.pat).some(q => q.on);
+  toggleRow(p, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
+  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
+  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
+
+  h3(p, 'Shade skirt', tableBase);
+  toggleRow(p, 'Add skirt', 'skirt', tableBase);
+  note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
+  slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt);
+  note(p, 'A flat plate runs from the collar top straight out to the skirt, and the skirt itself is the shade’s wall down to it. The plate prints as a bridge from the collar to the skirt; turn on supports there if your printer bridges poorly.', () => tableBase() && P.skirt);
+  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', () => tableBase() && P.skirt);
+  note(p, 'A 45° fillet under the plate, in the corner where it meets the skirt’s wall: it shortens the plate’s bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the skirt hugs the neck. 0 turns it off.', () => tableBase() && P.skirt);
+  slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
+  note(p, 'Webs under the plate, from the bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the skirt for twisting.', () => tableBase() && P.skirt);
+  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
+
+  h3(p, 'Cable & cover', tableBase);
+  slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
+  toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
+  note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
+  toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
+  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
+  slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
+  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+
+  const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
+  h3(p, 'Diffuser', difOn);
+  toggleRow(p, 'Add diffuser', 'diffuser', difOn);
+  note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under its middle; the 45° rim chamfer joins it to the wall and shortens the span. Thinner lets more light through; a vent hole lets heat out.', difOn);
+  segmented(p, 'Diffuser shape', 'diffStyle', { flat: 'Flat (supports)', cone: 'Cone (no supports)' }, difSet);
+  slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', difSet);
+  slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', difSet);
+  slider(p, 'Rim chamfer', 'diffChamfer', 0, 15, 0.5, 'mm', () => difSet() && P.diffStyle === 'flat');
+
+  h3(p, 'Ventilation', () => slotOn() || difSet());
+  note(p, 'Keeps the puck cool for long use: air comes in through the side intakes, passes under the raised puck, rises past its edge through two notches at the slot ends, and leaves through the diffuser’s vent hole.', () => slotOn());
+  segmented(p, 'Under the puck', 'underPuck', { flat: 'Flat', tape: 'Tape strips', ribs: 'Raiser ribs' }, slotOn);
+  note(p, 'Lifts the puck off the seat so air can pass under it. <b>Tape strips</b>: two strips of gel tape on the ledges beside the slot (shown in light blue, not exported). <b>Raiser ribs</b>: two printed ribs in the same place. Either way the seat is cut deeper by the gap so the puck stays flush, and two notches at the slot ends let the air rise past its edge.', slotOn);
+  slider(p, 'Gap under puck', 'underGap', 0.6, 4, 0.1, 'mm', () => slotOn() && P.underPuck !== 'flat');
+  toggleRow(p, 'Side air intakes', 'intake', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
+  note(p, 'Holes drilled up and inward from low on the base’s side into the space under the puck, so air gets in even with the base flat on the table and the bottom cover on. They slope upward, so you can’t see through them from the side. Pair them with a gap under the puck and a diffuser vent hole so warm air can flow out the top.', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
+  slider(p, 'Intake holes', 'intakeN', 2, 6, 1, '', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
+  slider(p, 'Intake hole Ø', 'intakeD', 2, 8, 0.5, 'mm', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
+  segmented(p, 'Diffuser vent', 'diffVentStyle', { center: 'Center hole', edge: 'Edge cuts' }, difSet);
+  note(p, '<b>Center hole</b>: one round hole in the middle, right over the puck. <b>Edge cuts</b>: square cuts through the diffuser and its rim chamfer, against the shade wall, so warm air rises along the wall and no bright spot shows through the middle. The shade wall itself is never cut.', difSet);
+  slider(p, 'Diffuser vent Ø', 'diffVent', 0, 30, 0.5, 'mm', () => difSet() && P.diffVentStyle !== 'edge');
+  slider(p, 'Edge cut size', 'diffVent', 0, 15, 0.5, 'mm', () => difSet() && P.diffVentStyle === 'edge');
+  slider(p, 'Edge cuts', 'diffVentN', 2, 8, 1, '', () => difSet() && P.diffVentStyle === 'edge');
 }
 
 // Print tab
