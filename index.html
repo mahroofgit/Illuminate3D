@@ -291,7 +291,7 @@ const DEFAULT = {
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
-  lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
+  lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
@@ -734,6 +734,34 @@ function skirtSolid(S) {
   }
   return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
 }
+// Click detent on the side wall: one vertical rib per lug on the base's bore wall, standing above the lug grooves and
+// reaching `detentFit` mm into the collar. The collar has, at each rib: a full-height entry channel (the collar slides
+// down past the rib), a shallow relief track for the twist, a short unrecessed hump just before the end (the click),
+// and a lock groove the rib drops into. Heights are in shade coordinates (collar bottom = 0).
+function detentGeom() {
+  if (!P.detent || P.mount !== 'twist') return null;
+  const Ri = P.collarD / 2, Ro = Ri + P.collarWall, c = P.clearance, boreR = Ro + c;
+  const z0 = P.lugH + c + P.lugDepth + c + 0.6, z1 = P.collarH - 1.2;   // above the groove roof, below the bore top
+  if (z1 - z0 < 2.5) return null;
+  const fit = P.detentFit, rr = 1, d = fit + 0.05;   // rib radius; collar recess depth (0.05 mm clear when seated)
+  const rc = boreR + rr - (c + fit);                 // rib centre: its inner edge sits `fit` mm inside the collar's face
+  const off = 180 / P.lugs, angs = Array.from({ length: P.lugs }, (_, k) => k * 360 / P.lugs + off);
+  return { z0, z1, fit, rr, d, rc, Ro, angs, hump: (2.5 / Ro) / DEG };
+}
+function collarDetentCuts(seg) {
+  const g = detentGeom();
+  if (!g) return [];
+  const out = [], rg = g.rr + 0.15, gc = g.Ro + rg - g.d;   // groove a little wider than the rib
+  const band = [[g.Ro - g.d, g.z0 - 0.4], [g.Ro + 1, g.z0 - 0.4], [g.Ro + 1, g.z1 + 0.4], [g.Ro - g.d, g.z1 + 0.4]];
+  const grooveA = (rg / g.Ro) / DEG;
+  for (const a of g.angs) {
+    out.push(rotZ(tr(cyl(g.z1 + 1.4, rg, rg, 24), gc, 0, -1), a));                    // entry channel, open at the bottom
+    out.push(rotZ(tr(cyl(g.z1 - g.z0 + 0.8, rg, rg, 24), gc, 0, g.z0 - 0.4), a + P.turn));   // lock groove
+    const span = P.turn - g.hump - grooveA;   // relief track from the entry channel to the hump
+    if (span > 0.5) out.push(rotZ(revolve(band, span, seg), a));
+  }
+  return out;
+}
 function shadeConnector(S, seg, overlap = 0.4) {
   if (P.mount === 'ring') {
     const holeR = P.holeD / 2, T = P.plateT;
@@ -757,7 +785,10 @@ function shadeConnector(S, seg, overlap = 0.4) {
   }
   if (P.mount === 'twist') {
     const Ri = P.collarD / 2, Ro = Ri + P.collarWall, d = P.lugDepth, lh = P.lugH;
-    const list = [sub(cyl(P.collarH + overlap, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1))];
+    let tube = sub(cyl(P.collarH + overlap, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1));
+    const dc = collarDetentCuts(seg);
+    if (dc.length) tube = sub(tube, uni(dc));
+    const list = [tube];
     const lugPoly = [[Ro - 0.5, 0], [Ro + d, 0], [Ro + d, lh], [Ro, lh + d], [Ro - 0.5, lh + d]];
     for (let k = 0; k < P.lugs; k++) list.push(rotZ(revolve(lugPoly, P.lugW, seg), k * 360 / P.lugs - P.lugW / 2));
     const dif = diffuserOn() ? diffuserSolid(S, seg) : null;
@@ -1143,13 +1174,10 @@ function buildBase(seg) {
     }
     if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, Rmax + 5, Rmax + 5, seg), 0, 0, -1), body))));
   }
-  if (P.detent) {
-    const bumps = [], len = g1 - (B.Ro + 0.3);
-    for (let k = 0; k < P.lugs; k++) {
-      const th = k * 360 / P.lugs + P.lugW / 2 - P.turn + ca + 1.5;
-      bumps.push(rotZ(tr(rot(cyl(len, 0.9, 0.9, 16), [0, 90, 0]), B.Ro + 0.3, 0, f - 0.45), th));
-    }
-    result = keep(result.add(uni(bumps)));
+  const dg = detentGeom();
+  if (dg) {   // vertical click ribs on the bore wall (rounded, so they print smooth over many layers)
+    const ribs = dg.angs.map(a => rotZ(tr(cyl(dg.z1 - dg.z0, dg.rr, dg.rr, 24), dg.rc, 0, f + dg.z0), a));
+    result = keep(result.add(uni(ribs)));
   }
   return result;
 }
@@ -1900,8 +1928,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Lug depth', 'lugDepth', 1, 4, 0.1, 'mm', twistOn);
   slider(p, 'Turn to lock', 'turn', 10, 60, 1, '°', twistOn);
   slider(p, 'Clearance', 'clearance', 0.1, 0.8, 0.05, 'mm', twistOn);
-  toggleRow(p, 'Click detent', 'detent', twistOn);
   note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
+  toggleRow(p, 'Click detent', 'detent', twistOn);
+  note(p, 'Small vertical ribs on the base’s inner wall click into matching grooves on the collar at the end of the turn. The collar has a relief track for the rest of the turn, so it only clicks at the end and turns freely otherwise.', twistOn);
+  slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent);
 }
 
 // Print tab
