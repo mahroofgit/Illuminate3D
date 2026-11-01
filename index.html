@@ -169,6 +169,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button id="tbShade" class="on" title="Show or hide the shade">Shade</button>
       <button id="tbBase" class="on" title="Show or hide the base">Base</button>
       <button id="tbHw" class="on" title="Show or hide the socket, bulb or puck">Hardware</button>
+      <button id="tbCover" class="on" title="Show or hide the bottom cover" hidden>Cover</button>
       <span class="tbsep"></span>
       <button id="tbOver" class="on">Overhangs</button>
       <button id="tbCut">Cutaway</button>
@@ -549,7 +550,7 @@ function baseDims() {
     else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', P.seatDepth], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + 4 - P.slotW / 2], ['clearance', 3]];
     else if (insert === 'slot') need = [['seat', P.seatDepth], ['cable channel', P.cableW + 1.5]];
     else need = [['socket plate', P.plateT], ['holder cavity', 24]];
-    if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT]);
+    if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT + (insert === 'socket' || P.slotStyle === 'funnel' ? 2 : 0)]);
     need.unshift(['twist-lock socket', boreDepth]);
     minH = need.reduce((a, [, v]) => a + v, 0);
     minParts = need.map(([k, v]) => `${k} ${+v.toFixed(1)}`).join(' + ');
@@ -574,6 +575,7 @@ const fmt = v => +(+v).toFixed(1);
 const LIMITS = {
   collarWall: () => [Math.max(1.6, P.wall), 5, `the collar should be at least as thick as the shade wall (${fmt(P.wall)} mm) so the joint isn't the weak point.`],
   cableW: () => [P.cableD + (P.cableGrip && baseInsert() !== 'socket' ? 1.6 : 0.5), 12, P.cableGrip ? `the cable (${fmt(P.cableD)} mm) has to fit above the snap-in lips.` : `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
+  coverT: () => (baseInsert() === 'socket' || P.slotStyle === 'funnel') ? [2.6, 4, `the twist-lock cover needs room for its lugs above a ledge that holds it.`] : [1.4, 4, ''],
   puckLift: () => [0, P.collarH + 15, `the riser can stand at most 15 mm above the collar top before it reaches into the shade’s flare.`],
   seatDepth: () => [P.slotH, Math.max(8, P.slotH + 4), `the seat must be at least as deep as the puck is thick (${fmt(P.slotH)} mm) so it sits flush.`],
   slotW: () => [P.slotH + 2 * P.clearance, 20, `the slot must be wider than the puck thickness plus clearance so the puck fits through on its edge.`],
@@ -636,26 +638,48 @@ function coverShape(B) {
 }
 const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (height h) in the plane y0, apex at y1
   keep(W.Manifold.hull([tr(box(len, 0.02, h), x, y0 - 0.01, zc - h / 2), tr(box(len, 0.01, 0.01), x, y1 - 0.005, zc - 0.005)]));
+// Round covers (funnel, holder cavity) twist-lock like the shade: three lugs on the cover's top edge go up vertical
+// slots in the cavity wall, a twist carries them along a groove, and they rest on the ledge below it behind a small
+// bump. The groove roofs are 45° and the cover exports upside down, so nothing needs supports.
+function coverLock(B) {
+  const k = coverShape(B), R = k.R, c = B.c, d = 1.2, lh = 1.2, T = P.coverT;
+  return { R, c, d, lh, T, zb: T - lh - c, zt: T + c, lugA: (6 / R) / DEG, turn: 28, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
+}
 function coverCuts(B, seg) {
-  const k = coverShape(B), gz = P.coverT / 2, out = [];
-  if (k.rect) for (const sg of [-1, 1]) out.push(prism(-k.hx, 2 * k.hx, sg * k.hw, sg * (k.hw + 0.5), gz, 1.1));
-  else out.push(revolve([[k.R - 0.3, gz - 0.85], [k.R + 0.5, gz], [k.R - 0.3, gz + 0.85]], 360, seg));
-  const X = k.rect ? k.hx : k.R;
-  out.push(tr(box(2.8, 5, P.coverT * 0.6 + 1), -X - 2.5, -2.5, -1));
+  const k = coverShape(B), out = [];
+  if (k.rect) {
+    const gz = P.coverT / 2;
+    for (const sg of [-1, 1]) out.push(prism(-k.hx, 2 * k.hx, sg * k.hw, sg * (k.hw + 0.5), gz, 1.1));
+    out.push(tr(box(2.8, 5, P.coverT * 0.6 + 1), -k.hx - 2.5, -2.5, -1));   // fingernail notch
+    return out;
+  }
+  const L = coverLock(B), { R, c, d, zb, zt, lugA, turn, ca } = L, g = R + d + c;
+  const vPoly = [[R - 0.3, -1], [g, -1], [g, zt], [R - 0.3, zt]];
+  const hPoly = [[R - 0.3, zb], [g, zb], [g, zt], [R, zt + d + c], [R - 0.3, zt + d + c]];
+  for (const a of L.at) {
+    out.push(rotZ(revolve(vPoly, lugA + 2 * ca, seg), a - turn - lugA / 2 - ca));
+    out.push(rotZ(revolve(hPoly, turn + lugA + 2 * ca, seg), a - turn - lugA / 2 - ca));
+  }
   return out;
 }
+function coverBumps(B) {
+  if (coverShape(B).rect) return [];
+  const L = coverLock(B);
+  return L.at.map(a => rotZ(tr(rot(cyl(L.d + L.c + 0.3, 0.45, 0.45, 12), [0, 90, 0]), L.R - 0.3, 0, L.zb), a - L.lugA / 2 - L.ca - 1.5));
+}
 function buildCover(seg) {
-  const B = baseDims(), k = coverShape(B), c = B.c, T = P.coverT, gz = T / 2, list = [];
+  const B = baseDims(), k = coverShape(B), c = B.c, T = P.coverT, list = [];
   if (k.rect) {
-    const hx = k.hx - c, hw = k.hw - c, L = Math.min(8, hx * 0.6);
+    const gz = T / 2, hx = k.hx - c, hw = k.hw - c, L = Math.min(8, hx * 0.6);
     list.push(tr(box(2 * hx, 2 * hw, T), -hx, -hw, 0));
     for (const sg of [-1, 1]) for (const xc of [-hx / 2, hx / 2]) list.push(prism(xc - L / 2, L, sg * hw, sg * (hw + 0.35), gz, 0.8));
-  } else {
-    const Rc = k.R - c;
-    list.push(cyl(T, Rc, Rc, seg));
-    for (let i = 0; i < 4; i++) list.push(rotZ(revolve([[Rc - 0.3, gz - 0.7], [Rc + 0.35, gz], [Rc - 0.3, gz + 0.7]], 24, seg), 45 + 90 * i - 12));
+    return uni(list);
   }
-  return uni(list);
+  const L = coverLock(B), Rc = L.R - c;
+  list.push(cyl(T, Rc, Rc, seg));
+  for (const a of L.at) list.push(rotZ(revolve([[Rc - 0.3, T - L.lh], [Rc + L.d, T - L.lh], [Rc + L.d, T], [Rc - 0.3, T]], L.lugA, seg), a - L.lugA / 2));
+  const sl = Math.min(24, 1.2 * Rc), sd = Math.min(1.2, T - 1.4);   // coin / fingernail slot to twist it
+  return sub(uni(list), tr(box(sl, 2.4, sd + 1), -sl / 2, -1.2, -1));
 }
 
 function buildBase(seg) {
@@ -708,6 +732,7 @@ function buildBase(seg) {
   }
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
   result = sub(result, uni(ins));
+  if (coverActive(B)) { const bumps = coverBumps(B); if (bumps.length) result = keep(result.add(uni(bumps))); }
   if (!B.adapter && P.cableGrip) {
     // Snap-in beads along the open bottom of the cable channel: round on top so the cable clicks past and pulls out
     // easily, with a 45° underside down to the bed so they print without support. Placed in whatever run of channel
@@ -760,6 +785,7 @@ const assembly = new THREE.Group(); root.add(assembly);
 const shadeGroup = new THREE.Group(); assembly.add(shadeGroup);
 const baseGroup = new THREE.Group(); assembly.add(baseGroup);
 const ghostGroup = new THREE.Group(); assembly.add(ghostGroup);
+const coverGroup = new THREE.Group(); assembly.add(coverGroup);
 assembly.add(bulbLight);
 
 const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
@@ -775,7 +801,7 @@ const capGlowMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xf3e2c4, si
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
-const view3 = { over: true, cut: false, explode: false, light: false, shade: true, base: true, hw: true };
+const view3 = { over: true, cut: false, explode: false, light: false, shade: true, base: true, hw: true, cover: true };
 let firstFrame = true;
 
 function resize() { const r = view.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); }
@@ -835,7 +861,7 @@ function update() {
   geo.setIndex(new THREE.BufferAttribute(S.idx, 1));
   geo.computeVertexNormals();
   const ov = analyse(S, geo);
-  clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup);
+  clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup); clearGroup(coverGroup);
   addSolid(shadeGroup, geo, shadeMat, capShadeMat);
   connMat.color.set(P.color); baseMat.color.set(P.baseColor);
 
@@ -846,8 +872,8 @@ function update() {
     if (c) { addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat); connVol = c.volume(); }
     if (P.mount === 'twist') { const b = buildBase(96); addSolid(baseGroup, manifoldToGeo(b), baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox(); }
     if (P.mount === 'twist' && coverActive(B)) {
-      const g = new THREE.Group(); addSolid(g, manifoldToGeo(buildCover(96)), baseMat, capBaseMat);
-      g.position.z = view3.explode ? -30 : 0; baseGroup.add(g);
+      addSolid(coverGroup, manifoldToGeo(buildCover(96)), baseMat, capBaseMat);
+      coverGroup.position.z = view3.explode ? -30 : 0;
     }
   });
 
@@ -857,7 +883,7 @@ function update() {
   shadeGroup.position.set(0, 0, twist ? B.f + ex : 0);
   shadeGroup.rotation.z = twist && !view3.explode ? -P.turn * DEG : 0;
   assembly.rotation.x = P.orient === 'pendant' ? Math.PI : 0;
-  shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw;
+  shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw; coverGroup.visible = view3.cover;
 
   // ghost hardware: socket + bulb, or LED puck
   const fit = FITTINGS[P.fitting] || FITTINGS.E27;
@@ -935,7 +961,7 @@ function update() {
   if (baseBox) parts.push(`${B.adapter ? 'Adapter' : 'Base'} Ø${(2 * Math.max(B.Rt, B.Rb)).toFixed(0)} × ${B.H.toFixed(0)} mm · ≈${(baseVol / 1000 * dens).toFixed(0)} g`);
   document.getElementById('dims').innerHTML = parts.join('<br>');
   document.getElementById('expBase').hidden = !twist;
-  document.getElementById('expCover').hidden = !(twist && coverActive(B));
+  document.getElementById('expCover').hidden = document.getElementById('tbCover').hidden = !(twist && coverActive(B));
   document.getElementById('expBase').textContent = B.adapter ? 'Export adapter STL' : 'Export base STL';
   document.getElementById('tbExplode').hidden = !twist;
   document.getElementById('tbBase').hidden = !twist;
@@ -1274,7 +1300,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
   toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
   slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
-  note(p, 'A separate plug (export it with “Export cover STL”) that clicks into the opening under the base once the puck and cable are in. The cable runs over it and out through the channel; pry it out with a fingernail at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
+  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
@@ -1343,7 +1369,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
-tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
+tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbCover', 'cover'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
 document.getElementById('tbReset').onclick = () => { if (lastStats) frame(lastStats.bb); };
 
 function randomize() {
@@ -1523,7 +1549,7 @@ async function runExport(which) {
         const body = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
         const conn = shadeConnector(S, q.seg);
         man = conn ? keep(body.add(conn)) : body;
-      } else man = which === 'cover' ? buildCover(q.seg) : buildBase(q.seg);
+      } else man = which === 'cover' ? keep(buildCover(q.seg).rotate([180, 0, 0])) : buildBase(q.seg);   // cover prints top-down
       if (man.status() !== 'NoError' || man.isEmpty()) throw new Error('Mesh error: ' + man.status());
       return stlBlob(man.getMesh());
     });
