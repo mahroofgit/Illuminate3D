@@ -1,0 +1,1121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Illuminate3D</title>
+<style>
+:root {
+  --bg: #f4f3f0; --panel: #ffffff; --panel-2: #f7f6f3; --line: #e3e1dc; --text: #1d1d1f; --muted: #6e6e73;
+  --accent: #d9822b; --accent-soft: rgba(217,130,43,.14); --ok: #2f9e55; --warn: #d7462e; --view: radial-gradient(ellipse at 50% 35%, #ffffff 0%, #e9e7e2 70%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --text: #f2f2f4; --muted: #9a9aa0;
+    --accent: #f0a050; --accent-soft: rgba(240,160,80,.16); --ok: #4cc27a; --warn: #ff6b55; --view: radial-gradient(ellipse at 50% 35%, #2c2c2f 0%, #141415 75%);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --text: #f2f2f4; --muted: #9a9aa0;
+  --accent: #f0a050; --accent-soft: rgba(240,160,80,.16); --ok: #4cc27a; --warn: #ff6b55; --view: radial-gradient(ellipse at 50% 35%, #2c2c2f 0%, #141415 75%);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+#app { display: grid; grid-template-columns: 384px 1fr; height: 100vh; }
+aside { display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; }
+header { padding: 14px 16px 10px; display: flex; align-items: baseline; gap: 8px; }
+header h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+header span { color: var(--muted); font-size: 12px; }
+nav { display: flex; gap: 4px; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
+nav button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
+nav button.on { background: var(--accent-soft); color: var(--accent); }
+#panels { flex: 1; overflow-y: auto; padding: 4px 16px 16px; min-height: 0; }
+.panel { display: none; } .panel.on { display: block; }
+h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 700; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 4px; margin: 8px 0; background: var(--panel-2); }
+.card > .cardhead { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding-bottom: 4px; }
+.card.off > .ctl { display: none; }
+.ctl { display: grid; grid-template-columns: 112px 1fr 62px; align-items: center; gap: 8px; margin: 6px 0; }
+.ctl.wide { grid-template-columns: 112px 1fr; }
+.ctl label { color: var(--muted); font-size: 12px; }
+.ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=number], select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
+input[type=number] { text-align: right; padding-right: 4px; }
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 4px 2px; border-radius: 5px; font: inherit; font-size: 12px; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.switch { position: relative; width: 34px; height: 20px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 20px; transition: .15s; cursor: pointer; }
+.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(14px); }
+.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.btn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 6px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+#profileWrap { border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); margin-top: 10px; }
+#profileCanvas { width: 100%; height: 250px; display: block; touch-action: none; cursor: crosshair; }
+.hint { color: var(--muted); font-size: 11px; padding: 0 10px 8px; }
+.note { color: var(--muted); font-size: 12px; margin: 6px 0; }
+footer { border-top: 1px solid var(--line); padding: 10px 16px 14px; }
+#checks { list-style: none; margin: 0 0 10px; padding: 0; font-size: 12px; }
+#checks li { display: flex; gap: 6px; padding: 2px 0; }
+#checks li b { width: 14px; flex: none; }
+#checks li.ok b { color: var(--ok); } #checks li.bad b { color: var(--warn); }
+.exports { display: flex; gap: 8px; } .exports .btn { flex: 1; padding: 9px 8px; }
+main { position: relative; background: var(--view); min-width: 0; }
+main canvas { display: block; width: 100%; height: 100%; }
+#toolbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#toolbar button { border: 0; background: transparent; color: var(--text); padding: 6px 10px; border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#toolbar button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+#toolbar button[hidden] { display: none; }
+#dims { position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+#busy { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.25); color: #fff; font-weight: 600; font-size: 14px; }
+#busy.on { display: grid; }
+@media (max-width: 820px) {
+  #app { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; height: auto; min-height: 100vh; }
+  main { grid-row: 1; height: 46vh; }
+  aside { grid-row: 2; border-right: 0; }
+  #panels { overflow: visible; }
+  #toolbar { max-width: calc(100% - 32px); overflow-x: auto; }
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.js",
+  "three/addons/": "./vendor/three/addons/"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <header><h1>Illuminate3D</h1><span>printable lampshades &amp; fittings</span></header>
+    <nav id="tabs">
+      <button data-tab="shape" class="on">Shape</button>
+      <button data-tab="pattern">Pattern</button>
+      <button data-tab="connector">Connector</button>
+      <button data-tab="print">Print</button>
+    </nav>
+    <div id="panels">
+      <div class="panel on" id="p-shape"></div>
+      <div class="panel" id="p-pattern"></div>
+      <div class="panel" id="p-connector"></div>
+      <div class="panel" id="p-print"></div>
+    </div>
+    <footer>
+      <ul id="checks"></ul>
+      <div class="exports">
+        <button class="btn primary" id="expShade">Export shade STL</button>
+        <button class="btn primary" id="expBase">Export base STL</button>
+      </div>
+    </footer>
+  </aside>
+  <main id="view">
+    <div id="toolbar">
+      <button id="tbOver" class="on">Overhangs</button>
+      <button id="tbCut">Cutaway</button>
+      <button id="tbExplode">Explode</button>
+      <button id="tbLight">Light on</button>
+      <button id="tbReset">Reset view</button>
+    </div>
+    <div id="dims"></div>
+    <div id="busy">Loading geometry engine…</div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import Module from './vendor/manifold/manifold.js';
+
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+
+// ---------------------------------------------------------------- reference data
+// Hole diameters are typical values; measure your own holder and adjust.
+const FITTINGS = {
+  E27: { label: 'E27 Edison socket', hole: 40.5, bodyD: 44, bulbR: 30, bulbZ: 78 },
+  E14: { label: 'E14 small Edison', hole: 29, bodyD: 32, bulbR: 18, bulbZ: 58 },
+  B22: { label: 'B22 bayonet', hole: 29.5, bodyD: 34, bulbR: 30, bulbZ: 78 },
+  M10: { label: 'M10 nipple (cord set)', hole: 10.5, bodyD: 44, bulbR: 30, bulbZ: 78 },
+  custom: { label: 'Custom hole', hole: null, bodyD: null, bulbR: 30, bulbZ: 78 },
+};
+const PUCKS = {
+  p70: { label: 'USB puck Ø70 × 16', d: 70, h: 16 },
+  p50: { label: 'Small puck Ø50 × 12', d: 50, h: 12 },
+  p90: { label: 'Large puck Ø90 × 20', d: 90, h: 20 },
+  custom: { label: 'Custom size', d: null, h: null },
+};
+const PRINTERS = {
+  b180: { label: 'Bambu A1 mini (180³)', x: 180, y: 180, z: 180 },
+  b256: { label: 'Bambu A1 / P1S / X1 (256³)', x: 256, y: 256, z: 256 },
+  mk4: { label: 'Prusa MK4 (250×210×220)', x: 250, y: 210, z: 220 },
+  e3: { label: 'Ender 3 (220×220×250)', x: 220, y: 220, z: 250 },
+  big: { label: 'Large format (350³)', x: 350, y: 350, z: 350 },
+};
+const PROFILES = {
+  Drum: [[0, 70], [1, 70]],
+  Barrel: [[0, 55], [0.45, 82], [1, 60]],
+  Bell: [[0, 88], [0.3, 76], [0.75, 48], [1, 32]],
+  Globe: [[0, 38], [0.18, 72], [0.5, 90], [0.82, 72], [1, 38]],
+  Cone: [[0, 92], [1, 38]],
+  Tulip: [[0, 42], [0.4, 66], [0.8, 78], [1, 92]],
+  Hourglass: [[0, 78], [0.5, 46], [1, 78]],
+  Lantern: [[0, 50], [0.12, 72], [0.88, 72], [1, 50]],
+};
+
+const DEFAULT = {
+  v: 1,
+  height: 170, width: 1, aspect: 1, smooth: 0.15, curve: 'smooth',
+  profile: [[0, 55], [0.45, 82], [1, 60]],
+  sides: 0, round: 0.35, twist: 0, twistStyle: 'linear', wall: 1.6,
+  pat: {
+    ribs:    { on: false, count: 24, depth: 2, sharp: 1.5 },
+    spiral:  { on: true, count: 24, turns: 0.6, depth: 2.5, sharp: 1.5 },
+    rings:   { on: false, count: 20, depth: -1.5, sharp: 2 },
+    wavy:    { on: false, count: 14, waves: 6, amp: 1.5, depth: 2, sharp: 1.5 },
+    diamond: { on: false, count: 20, rows: 10, depth: 2.5 },
+    bubbles: { on: false, count: 18, size: 0.85, depth: 2.5 },
+    noise:   { on: false, scale: 25, depth: 2.5, octaves: 3, seed: 7 },
+  },
+  fadeConn: 10, fadeOpen: 4,
+  orient: 'table', mount: 'twist',
+  fitting: 'E27', holeD: 40.5, socketD: 44,
+  ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
+  baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2,
+  collarD: 76, collarWall: 2.4, collarH: 14,
+  lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
+  baseD: 116, baseTopD: 96, baseH: 42, cableW: 5,
+  printer: 'b256', material: 'PLA', overhang: 50,
+  previewRes: 180, previewLayer: 1, exportQ: 'fine',
+  color: '#f2ede4', baseColor: '#3a3a3c',
+};
+const clone = o => JSON.parse(JSON.stringify(o));
+function merge(dst, src) { for (const k in src) { if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k]) && dst[k] && typeof dst[k] === 'object') merge(dst[k], src[k]); else if (k in dst) dst[k] = src[k]; } return dst; }
+
+let P = clone(DEFAULT);
+try { const h = location.hash.slice(1); if (h.startsWith('d=')) merge(P, JSON.parse(decodeURIComponent(escape(atob(h.slice(2)))))); else { const s = localStorage.getItem('lampstudio'); if (s) merge(P, JSON.parse(s)); } } catch (e) { /* ignore bad saved state */ }
+
+const getK = k => k.split('.').reduce((o, p) => o[p], P);
+const setK = (k, v) => { const ps = k.split('.'); const last = ps.pop(); ps.reduce((o, p) => o[p], P)[last] = v; };
+
+// ---------------------------------------------------------------- shade geometry
+function buildProfile() {
+  const pts = P.profile.slice().sort((a, b) => a[0] - b[0]);
+  const k = pts.length, n = 400, out = new Float64Array(n + 1);
+  const m = pts.map((p, i) => {
+    if (P.curve === 'linear') return 0;
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(k - 1, i + 1)];
+    return (b[1] - a[1]) / Math.max(1e-6, b[0] - a[0]);
+  });
+  let s0 = 0;
+  for (let s = 0; s <= n; s++) {
+    const z = s / n;
+    while (s0 < k - 2 && z > pts[s0 + 1][0]) s0++;
+    const p0 = pts[s0], p1 = pts[Math.min(s0 + 1, k - 1)];
+    const h = Math.max(1e-6, p1[0] - p0[0]);
+    const u = Math.min(1, Math.max(0, (z - p0[0]) / h));
+    if (P.curve === 'linear') out[s] = p0[1] + (p1[1] - p0[1]) * u;
+    else {
+      const u2 = u * u, u3 = u2 * u;
+      out[s] = (2 * u3 - 3 * u2 + 1) * p0[1] + (u3 - 2 * u2 + u) * h * m[s0] + (-2 * u3 + 3 * u2) * p1[1] + (u3 - u2) * h * m[Math.min(s0 + 1, k - 1)];
+    }
+  }
+  const sig = P.smooth * 40;
+  if (sig > 0.5) {
+    const rad = Math.ceil(sig * 3), w = [];
+    for (let i = -rad; i <= rad; i++) w.push(Math.exp(-(i * i) / (2 * sig * sig)));
+    const src = out.slice();
+    for (let s = 0; s <= n; s++) {
+      let acc = 0, ws = 0;
+      for (let i = -rad; i <= rad; i++) { const j = Math.min(n, Math.max(0, s + i)); acc += src[j] * w[i + rad]; ws += w[i + rad]; }
+      out[s] = acc / ws;
+    }
+  }
+  for (let s = 0; s <= n; s++) out[s] = Math.max(6, out[s]);
+  return out;
+}
+
+function makeShapeF() {
+  const n = Math.round(P.sides), ro = P.round, asp = P.aspect;
+  const seg = TAU / n, half = Math.PI / n;
+  const c = (1 - ro) / Math.cos(half);
+  const xt = Math.atan((1 - ro) * Math.tan(half));
+  return a => {
+    let f = 1;
+    if (n >= 3) {
+      const x = Math.abs((((a % seg) + seg) % seg) - half);
+      if (x <= xt) f = 1 / Math.cos(x);
+      else { const d = half - x, sd = Math.sin(d); f = c * Math.cos(d) + Math.sqrt(Math.max(0, ro * ro - c * c * sd * sd)); }
+    }
+    if (asp !== 1) { const ca = Math.cos(a), sa = Math.sin(a) / asp; f /= Math.sqrt(ca * ca + sa * sa); }
+    return f;
+  };
+}
+
+function hash3(x, y, z, seed) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1440670441) ^ Math.imul(seed, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h & 0xffff) / 32767.5 - 1;
+}
+function vnoise(x, y, z, seed) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const q = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const u = q(fx), v = q(fy), w = q(fz);
+  const L = (a, b, t) => a + (b - a) * t;
+  const c = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz, seed);
+  return L(L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v), L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v), w);
+}
+
+function makePattern(Rm) {
+  const p = P.pat, L = [];
+  const sh = (w, s) => Math.pow(Math.max(0, w), s);
+  if (p.ribs.on) { const n = Math.round(p.ribs.count), { depth: d, sharp: s } = p.ribs; L.push(a => d * sh(0.5 + 0.5 * Math.cos(n * a), s)); }
+  if (p.spiral.on) { const n = Math.round(p.spiral.count), tw = p.spiral.turns * TAU, { depth: d, sharp: s } = p.spiral; L.push((a, t) => d * sh(0.5 + 0.5 * Math.cos(n * (a + tw * t)), s)); }
+  if (p.rings.on) { const n = p.rings.count, { depth: d, sharp: s } = p.rings; L.push((a, t) => d * sh(0.5 + 0.5 * Math.cos(n * TAU * t), s)); }
+  if (p.wavy.on) { const n = p.wavy.count, wv = Math.round(p.wavy.waves), { amp, depth: d, sharp: s } = p.wavy; L.push((a, t) => d * sh(0.5 + 0.5 * Math.cos(n * TAU * t + amp * Math.sin(wv * a)), s)); }
+  if (p.diamond.on) {
+    const n = Math.round(p.diamond.count), rows = p.diamond.rows, d = p.diamond.depth;
+    const tri = x => 1 - 2 * Math.abs(x - Math.floor(x) - 0.5);
+    L.push((a, t) => { const u = n * a / TAU, v = rows * t; return d * Math.min(tri(u + v), tri(u - v)); });
+  }
+  if (p.bubbles.on) {
+    const n = Math.round(p.bubbles.count), d = p.bubbles.depth;
+    const cellH = TAU * Rm / n * 0.866, rad = p.bubbles.size * 0.5 * TAU * Rm / n;
+    L.push((a, t, zU, base) => {
+      const cw = TAU * base / n, u = ((a % TAU) + TAU) % TAU / TAU * n, v = zU / cellH;
+      let best = 0;
+      for (let r = Math.floor(v); r <= Math.floor(v) + 1; r++) {
+        const off = (r & 1) * 0.5, uc = Math.round(u - off) + off;
+        const du = (u - uc) * cw, dv = (v - r) * cellH, q = 1 - (du * du + dv * dv) / (rad * rad);
+        if (q > best) best = q;
+      }
+      return d * Math.sqrt(best);
+    });
+  }
+  if (p.noise.on) {
+    const { scale, depth: d, seed } = p.noise, oct = Math.round(p.noise.octaves), k = Rm / scale;
+    L.push((a, t, zU) => {
+      let x = Math.cos(a) * k, y = Math.sin(a) * k, z = zU / scale, amp = 1, sum = 0, norm = 0;
+      for (let o = 0; o < oct; o++) { sum += amp * vnoise(x, y, z, seed + o); norm += amp; amp *= 0.5; x *= 2; y *= 2; z *= 2; }
+      return d * sum / norm * 1.6;
+    });
+  }
+  return (a, t, zU, base) => { let s = 0; for (const f of L) s += f(a, t, zU, base); return s; };
+}
+
+const smoothstepE = (e, x) => e <= 0 ? 1 : x >= e ? 1 : x <= 0 ? 0 : (x /= e, x * x * (3 - 2 * x));
+
+// Builds the shade wall as one closed, indexed mesh in print coordinates (Z up, connector end on the bed).
+function buildShade(N, layer) {
+  const prof = buildProfile(), n = prof.length - 1, H = P.height, W = P.width;
+  const pend = P.orient === 'pendant', twistMount = P.mount === 'twist';
+  const pr = t => { const x = Math.min(n, Math.max(0, t * n)), i = Math.min(n - 1, Math.floor(x)); return (prof[i] + (prof[i + 1] - prof[i]) * (x - i)) * W; };
+  let Rm = 0; for (let i = 0; i <= n; i++) Rm += prof[i] * W; Rm /= n + 1;
+  const shapeF = makeShapeF(), patt = makePattern(Rm);
+  const twR = P.twist * DEG;
+  const twAt = t => P.twistStyle === 'ease' ? twR * t * t * (3 - 2 * t) : P.twistStyle === 'wave' ? twR * Math.sin(Math.PI * t) : twR * t;
+  const lim = P.overhang * DEG;
+  const cosA = new Float64Array(N), sinA = new Float64Array(N), ang = new Float64Array(N);
+  for (let j = 0; j < N; j++) { ang[j] = TAU * j / N; cosA[j] = Math.cos(ang[j]); sinA[j] = Math.sin(ang[j]); }
+
+  function rowBody(zb, O, I) {
+    const tP = zb / H, tU = pend ? 1 - tP : tP;
+    const base = pr(tU), tw = twAt(tU);
+    const d = (pr(Math.min(1, tU + 0.004)) - pr(Math.max(0, tU - 0.004))) / (0.008 * H);
+    const wh = P.wall * Math.min(2, Math.sqrt(1 + d * d));
+    const fade = smoothstepE(P.fadeConn, zb) * smoothstepE(P.fadeOpen, H - zb);
+    const zU = tU * H;
+    for (let j = 0; j < N; j++) {
+      const a = ang[j] - tw;
+      let r = base * shapeF(a);
+      if (fade > 0) r += fade * patt(a, tU, zU, base);
+      r = Math.max(r, P.wall + 2);
+      O[j] = r; I[j] = Math.max(1, r - wh);
+    }
+  }
+
+  const o0 = new Float64Array(N), i0 = new Float64Array(N);
+  rowBody(0, o0, i0);
+  let zStart = 0, transH = 0, Rco = 0, wT = 0;
+  if (twistMount) {
+    Rco = P.collarD / 2 + P.collarWall;
+    wT = Math.min(P.collarWall, P.wall / Math.cos(lim));
+    let md = 0;
+    for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - (Rco - wT)));
+    transH = Math.max(2, md / Math.tan(lim));
+    zStart = P.collarH;
+  }
+  const zb = zStart + transH;
+  const nT = twistMount ? Math.max(2, Math.ceil(transH / layer)) : 0;
+  const nB = Math.max(2, Math.ceil(H / layer));
+  const M = nT + nB + 1, NM = N * M;
+  const pos = new Float32Array(NM * 2 * 3), rowZ = new Float64Array(M), rowMinIn = new Float64Array(M);
+  const O = new Float64Array(N), I = new Float64Array(N);
+  let maxR = 0;
+  for (let i = 0; i < M; i++) {
+    let z;
+    if (i < nT) {
+      const s = i / nT; z = zStart + s * transH;
+      for (let j = 0; j < N; j++) { O[j] = Rco + (o0[j] - Rco) * s; I[j] = (Rco - wT) + (i0[j] - (Rco - wT)) * s; }
+    } else { const zz = (i - nT) / nB * H; z = zb + zz; rowBody(zz, O, I); }
+    rowZ[i] = z;
+    let mi = 1e9;
+    for (let j = 0; j < N; j++) {
+      const ko = (i * N + j) * 3, ki = (NM + i * N + j) * 3;
+      pos[ko] = O[j] * cosA[j]; pos[ko + 1] = O[j] * sinA[j]; pos[ko + 2] = z;
+      pos[ki] = I[j] * cosA[j]; pos[ki + 1] = I[j] * sinA[j]; pos[ki + 2] = z;
+      if (I[j] < mi) mi = I[j];
+      if (O[j] > maxR) maxR = O[j];
+    }
+    rowMinIn[i] = mi;
+  }
+  const idx = new Uint32Array((4 * (M - 1) * N + 4 * N) * 3);
+  let q = 0;
+  const tri = (a, b, c) => { idx[q++] = a; idx[q++] = b; idx[q++] = c; };
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N;
+    const a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri(a, b, c); tri(a, c, d);
+    tri(NM + a, NM + c, NM + b); tri(NM + a, NM + d, NM + c);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N;
+    tri(j, NM + j, NM + j1); tri(j, NM + j1, j1);
+    tri(top + j, NM + top + j1, NM + top + j); tri(top + j, top + j1, NM + top + j1);
+  }
+  const rMid0 = new Float64Array(N);
+  for (let j = 0; j < N; j++) rMid0[j] = (o0[j] + i0[j]) / 2;
+  return { pos, idx, N, M, rowZ, rowMinIn, rMid0, rIn0: i0, rOut0: o0, zStart, transH, zb, H, maxR, zEnd: rowZ[M - 1] };
+}
+
+function meshVolume(pos, idx) {
+  let v = 0;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+    v += pos[a] * (pos[b + 1] * pos[c + 2] - pos[b + 2] * pos[c + 1]) - pos[a + 1] * (pos[b] * pos[c + 2] - pos[b + 2] * pos[c]) + pos[a + 2] * (pos[b] * pos[c + 1] - pos[b + 1] * pos[c]);
+  }
+  return v / 6;
+}
+
+// ---------------------------------------------------------------- connector geometry (Manifold CSG)
+let W = null;
+let gcList = null;
+const keep = o => { if (gcList) gcList.push(o); return o; };
+function gcScope(fn) { const prev = gcList; gcList = []; try { return fn(); } finally { for (const o of gcList) { try { o.delete(); } catch (e) { /* already freed */ } } gcList = prev; } }
+const cyl = (h, r1, r2 = r1, seg = 96) => keep(W.Manifold.cylinder(h, r1, r2, seg, false));
+const box = (x, y, z) => keep(W.Manifold.cube([x, y, z], false));
+const revolve = (poly, deg = 360, seg = 96) => keep(W.Manifold.revolve([poly], seg, deg));
+const extrudeXS = (contours, h) => keep(keep(new W.CrossSection(contours, 'Positive')).extrude(h));
+const tr = (m, x, y, z) => keep(m.translate([x, y, z]));
+const rotZ = (m, deg) => keep(m.rotate([0, 0, deg]));
+const rot = (m, v) => keep(m.rotate(v));
+const uni = list => list.length === 1 ? list[0] : keep(W.Manifold.union(list));
+const sub = (a, b) => keep(a.subtract(b));
+
+function shadeConnector(S, seg) {
+  if (P.mount === 'ring') {
+    const holeR = P.holeD / 2, T = P.plateT;
+    const contour = arr => { const pts = []; for (let j = 0; j < S.N; j++) { const a = TAU * j / S.N; pts.push([arr[j] * Math.cos(a), arr[j] * Math.sin(a)]); } return pts; };
+    let part;
+    if (P.ringStyle === 'disc') part = extrudeXS([contour(S.rMid0)], T);
+    else {
+      const hubR = holeR + P.hubW;
+      const list = [cyl(T, hubR, hubR, seg)];
+      const inner = Array.from(S.rIn0, r => Math.max(hubR + 1, r - 3));
+      list.push(extrudeXS([contour(S.rMid0), contour(inner).reverse()], T));
+      for (let k = 0; k < P.spokes; k++) {
+        const deg = k * 360 / P.spokes + 90;
+        const j = Math.round(deg / 360 * S.N) % S.N;
+        const L = S.rMid0[j] - (hubR - 1);
+        list.push(rotZ(tr(box(L, P.spokeW, T), hubR - 1, -P.spokeW / 2, 0), deg));
+      }
+      part = uni(list);
+    }
+    return sub(part, tr(cyl(T + 2, holeR, holeR, seg), 0, 0, -1));
+  }
+  if (P.mount === 'twist') {
+    const Ri = P.collarD / 2, Ro = Ri + P.collarWall, d = P.lugDepth, lh = P.lugH;
+    const list = [sub(cyl(P.collarH + 0.4, Ro, Ro, seg), tr(cyl(P.collarH + 3, Ri, Ri, seg), 0, 0, -1))];
+    const lugPoly = [[Ro - 0.5, 0], [Ro + d, 0], [Ro + d, lh], [Ro, lh + d], [Ro - 0.5, lh + d]];
+    for (let k = 0; k < P.lugs; k++) list.push(rotZ(revolve(lugPoly, P.lugW, seg), k * 360 / P.lugs - P.lugW / 2));
+    return uni(list);
+  }
+  return null;
+}
+
+function baseDims() {
+  const Ri = P.collarD / 2, Ro = Ri + P.collarWall, c = P.clearance;
+  const boreR = Ro + c, gr1 = Ro + P.lugDepth + c, ringMin = gr1 + 2.4, boreDepth = P.collarH - 0.5;
+  const adapter = P.baseType === 'adapter' || P.orient === 'pendant';
+  const insert = adapter ? 'socket' : P.insert;
+  let H, f, Rt, Rb;
+  if (adapter) { H = boreDepth + P.plateT; f = P.plateT; Rt = Rb = ringMin + 0.6; }
+  else {
+    const slotH = P.seatDepth + P.slotPlateT + (P.slotD / 2 + c + 4 - P.slotW / 2) + 3;
+    const minH = boreDepth + (insert === 'puck' ? P.puckH + P.cableW + 2 : insert === 'slot' ? slotH : P.plateT + 24);
+    H = Math.max(P.baseH, minH); f = H - boreDepth;
+    Rt = Math.max(P.baseTopD / 2, ringMin); Rb = Math.max(P.baseD / 2, 20);
+  }
+  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
+}
+
+function slotDims(B) {
+  const cavR = P.slotD / 2 + B.c + 4, zSeat = B.f - P.seatDepth, zPlateBot = zSeat - P.slotPlateT;
+  return { cavR, zSeat, zPlateBot, zFunnel: zPlateBot - (cavR - P.slotW / 2) };
+}
+
+function buildBase(seg) {
+  const B = baseDims(), { H, f } = B;
+  const body = B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve([[0, 0], [B.Rb - 0.8, 0], [B.Rb, 0.8], [B.Rt, H], [0, H]], 360, seg);
+  const cut = [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
+  const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
+  const ca = (B.c / B.Ro) / DEG + 0.6;
+  const vPoly = [[gr0, f], [g1, f], [g1, H + 1], [gr0, H + 1]];
+  const hPoly = [[gr0, f], [g1, f], [g1, f + lh], [B.Ro + B.c, f + lh + roof], [gr0, f + lh + roof]];
+  for (let k = 0; k < P.lugs; k++) {
+    const c = k * 360 / P.lugs;
+    cut.push(rotZ(revolve(vPoly, P.lugW + 2 * ca, seg), c - P.lugW / 2 - ca));
+    cut.push(rotZ(revolve(hPoly, P.lugW + P.turn + 2 * ca, seg), c - P.lugW / 2 - P.turn - ca));
+  }
+  if (B.insert === 'puck') {
+    const pr = P.puckD / 2 + B.c;
+    cut.push(tr(cyl(P.puckH + 0.01, pr, pr, seg), 0, 0, f - P.puckH));
+    cut.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, f - P.puckH));
+    cut.push(tr(cyl(f - P.puckH + 1.2, P.cableW / 2, P.cableW / 2, 32), 0, 0, -1));
+  } else if (B.insert === 'slot') {
+    // Puck seat on a thin floor with a slot: push the puck up edgewise through the slot, turn it flat, it rests on the floor.
+    // Below the slot a 45° funnel guides the puck in and keeps the ceiling printable without supports.
+    const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2;
+    cut.push(tr(cyl(P.seatDepth + 0.01, hx, hx, seg), 0, 0, s.zSeat));
+    cut.push(tr(box(2 * hx, P.slotW, P.slotPlateT + 0.02), -hx, -hw, s.zPlateBot - 0.01));
+    const ring = tr(cyl(0.01, s.cavR, s.cavR, seg), 0, 0, s.zFunnel);
+    const neck = tr(box(2 * hx, P.slotW, 0.01), -hx, -hw, s.zPlateBot - 0.01);
+    cut.push(keep(W.Manifold.hull([ring, neck])));
+    cut.push(tr(cyl(s.zFunnel + 1.01, s.cavR, s.cavR, seg), 0, 0, -1));
+  } else {
+    const hr = P.holeD / 2;
+    cut.push(tr(cyl(P.plateT + 2, hr, hr, seg), 0, 0, f - P.plateT - 1));
+    if (!B.adapter) {
+      const cr = P.socketD / 2, top = f - P.plateT, coneH = Math.max(0, cr - hr);
+      cut.push(tr(cyl(top - coneH + 1, cr, cr, seg), 0, 0, -1));
+      if (coneH > 0) cut.push(tr(cyl(coneH + 0.01, cr, hr, seg), 0, 0, top - coneH));
+    }
+  }
+  if (!B.adapter) cut.push(tr(box(B.Rb + 2, P.cableW, P.cableW), 0, -P.cableW / 2, -0.01));
+  let result = sub(body, uni(cut));
+  if (P.detent) {
+    const bumps = [], len = g1 - (B.Ro + 0.3);
+    for (let k = 0; k < P.lugs; k++) {
+      const th = k * 360 / P.lugs + P.lugW / 2 - P.turn + ca + 1.5;
+      bumps.push(rotZ(tr(rot(cyl(len, 0.9, 0.9, 16), [0, 90, 0]), B.Ro + 0.3, 0, f - 0.45), th));
+    }
+    result = keep(result.add(uni(bumps)));
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------- three.js scene
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.zoomToCursor = true;
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.2); keyLight.position.set(300, 500, 400); scene.add(keyLight);
+const bulbLight = new THREE.PointLight(0xffc27a, 0, 0, 1.2);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 96), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.06 }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+
+const root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);   // Z-up → Y-up
+const assembly = new THREE.Group(); root.add(assembly);
+const shadeGroup = new THREE.Group(); assembly.add(shadeGroup);
+const baseGroup = new THREE.Group(); assembly.add(baseGroup);
+const ghostGroup = new THREE.Group(); assembly.add(ghostGroup);
+assembly.add(bulbLight);
+
+const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, emissive: 0xffa040, emissiveIntensity: 0 });
+const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.DoubleSide, emissive: 0xffa040, emissiveIntensity: 0 });
+const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.DoubleSide });
+const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
+const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
+
+const view3 = { over: true, cut: false, explode: false, light: false };
+let shadeMesh = null, firstFrame = true;
+
+function resize() { const r = view.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(view);
+resize();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+function clearGroup(g) { for (const c of [...g.children]) { if (c.isLight) continue; g.remove(c); c.geometry?.dispose(); } }
+function manifoldToGeo(man) {
+  const mesh = man.getMesh(), np = mesh.numProp, v = mesh.vertProperties, t = mesh.triVerts;
+  const pos = new Float32Array(t.length * 3);
+  for (let i = 0; i < t.length; i++) { const b = t[i] * np; pos[i * 3] = v[b]; pos[i * 3 + 1] = v[b + 1]; pos[i * 3 + 2] = v[b + 2]; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.computeVertexNormals();
+  return g;
+}
+function zCyl(rTop, rBot, h, z0, mat = ghostMat) {
+  const g = new THREE.CylinderGeometry(rTop, rBot, h, 48); g.rotateX(Math.PI / 2); g.translate(0, 0, z0 + h / 2);
+  return new THREE.Mesh(g, mat);
+}
+
+// ---------------------------------------------------------------- update cycle
+let lastStats = null;
+function analyse(S, geo) {
+  const nrm = geo.attributes.normal.array, NM = S.N * S.M;
+  const col = new Float32Array(NM * 2 * 3);
+  const base = new THREE.Color(P.color), red = new THREE.Color('#ff3b30');
+  const zMin = (P.mount === 'twist' ? S.zStart : 0) + 0.6, lim = P.overhang;
+  let bad = 0, total = 0, maxOver = 0;
+  for (let k = 0; k < NM; k++) {
+    const i = Math.floor(k / S.N), z = S.rowZ[i];
+    let flag = false;
+    if (z > zMin && i < S.M - 1) {
+      const ov = Math.max(-nrm[k * 3 + 2], -nrm[(NM + k) * 3 + 2]);
+      const deg = ov > 0 ? Math.asin(Math.min(1, ov)) / DEG : 0;
+      total++; if (deg > maxOver) maxOver = deg;
+      if (deg > lim + 0.5) { bad++; flag = true; }
+    }
+    const c = flag && view3.over ? red : base;
+    col[k * 3] = col[(NM + k) * 3] = c.r; col[k * 3 + 1] = col[(NM + k) * 3 + 1] = c.g; col[k * 3 + 2] = col[(NM + k) * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return { badPct: total ? bad / total * 100 : 0, maxOver };
+}
+
+function update() {
+  const S = buildShade(Math.round(P.previewRes), P.previewLayer);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(S.pos, 3));
+  geo.setIndex(new THREE.BufferAttribute(S.idx, 1));
+  geo.computeVertexNormals();
+  const ov = analyse(S, geo);
+  clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup);
+  shadeMesh = new THREE.Mesh(geo, shadeMat); shadeGroup.add(shadeMesh);
+  connMat.color.set(P.color); baseMat.color.set(P.baseColor);
+
+  let connVol = 0, baseVol = 0, baseBox = null;
+  const B = baseDims();
+  if (W) gcScope(() => {
+    const c = shadeConnector(S, 96);
+    if (c) { shadeGroup.add(new THREE.Mesh(manifoldToGeo(c), connMat)); connVol = c.volume(); }
+    if (P.mount === 'twist') { const b = buildBase(96); baseGroup.add(new THREE.Mesh(manifoldToGeo(b), baseMat)); baseVol = b.volume(); baseBox = b.boundingBox(); }
+  });
+
+  // place parts (assembly coords: base print frame, Z up)
+  const twist = P.mount === 'twist';
+  const ex = view3.explode && twist ? 60 : 0;
+  shadeGroup.position.set(0, 0, twist ? B.f + ex : 0);
+  shadeGroup.rotation.z = twist && !view3.explode ? -P.turn * DEG : 0;
+  assembly.rotation.x = P.orient === 'pendant' ? Math.PI : 0;
+
+  // ghost hardware: socket + bulb, or LED puck
+  const fit = FITTINGS[P.fitting] || FITTINGS.E27;
+  let lightZ = null;
+  if (P.mount === 'ring' || (twist && B.insert === 'socket')) {
+    const z0 = twist ? B.f - P.plateT : 0, br = P.holeD / 2 - 0.5;
+    ghostGroup.add(zCyl(P.socketD / 2 - 1, P.socketD / 2 - 1, 42, z0 - 44));
+    ghostGroup.add(zCyl(br, br, 14, z0 - 2));
+    ghostGroup.add(zCyl(fit.bulbR * 0.45, fit.bulbR * 0.5, fit.bulbZ - fit.bulbR * 0.6 - 12, z0 + 12, glowMat));
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(fit.bulbR, 40, 24), glowMat); bulb.position.z = z0 + fit.bulbZ; ghostGroup.add(bulb);
+    lightZ = z0 + fit.bulbZ;
+  } else if (twist && B.insert === 'puck') {
+    ghostGroup.add(zCyl(P.puckD / 2, P.puckD / 2, P.puckH - 2, B.f - P.puckH));
+    ghostGroup.add(zCyl(P.puckD / 2 - 6, P.puckD / 2 - 6, 2, B.f - 2, glowMat));
+    lightZ = B.f + 30;
+  } else if (twist && B.insert === 'slot') {
+    const z = B.f - P.seatDepth, r = P.slotD / 2;
+    ghostGroup.add(zCyl(r, r, P.slotH - 1, z));
+    ghostGroup.add(zCyl(r - 4, r - 4, 1, z + P.slotH - 1, glowMat));
+    ghostGroup.add(zCyl(1.6, 1.6, z + 1, -1));
+    lightZ = z + 30;
+  }
+  bulbLight.position.set(0, 0, lightZ ?? S.zEnd / 2);
+  applyLight();
+
+  // checks
+  const pr = PRINTERS[P.printer];
+  const shadeW = 2 * S.maxR, shadeH = S.zEnd;
+  const dens = P.material === 'PETG' ? 1.27 : 1.24;
+  const shadeG = (meshVolume(S.pos, S.idx) + connVol) / 1000 * dens;
+  const checks = [];
+  checks.push([ov.badPct < 0.5, ov.badPct < 0.5 ? `Prints without supports (max overhang ${ov.maxOver.toFixed(0)}° ≤ ${P.overhang}°)` : `${ov.badPct.toFixed(1)}% of the wall is steeper than ${P.overhang}° (shown red)`]);
+  const fits = shadeW <= Math.min(pr.x, pr.y) && shadeH <= pr.z;
+  checks.push([fits, fits ? `Shade fits the ${pr.label.split(' (')[0]} bed` : `Shade ${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm exceeds the ${pr.label}`]);
+  if (P.mount === 'ring') {
+    const minIn = Math.min(...S.rIn0);
+    checks.push([minIn > P.holeD / 2 + P.hubW + 2, minIn > P.holeD / 2 + P.hubW + 2 ? `Socket ring Ø${P.holeD} mm fits inside the shade opening` : `Shade opening too small for a Ø${P.holeD} mm ring + hub`]);
+  }
+  if (twist) {
+    if (B.insert === 'puck') {
+      const okP = P.puckD / 2 + B.c <= B.boreR - 1;
+      checks.push([okP, okP ? `Puck Ø${P.puckD} fits under the Ø${P.collarD} collar` : `Puck Ø${P.puckD} is wider than the collar bore — raise collar Ø to ≥ ${Math.ceil(P.puckD + 2 * B.c + 2 - 2 * P.collarWall)}`]);
+    } else if (B.insert === 'slot') {
+      const need = P.slotH + 2 * B.c;
+      checks.push([P.slotW >= need, P.slotW >= need ? `${P.slotD} × ${P.slotW} mm slot lets the ${P.slotH} mm puck through edgewise` : `Puck is ${P.slotH} mm thick — widen the slot to ≥ ${need.toFixed(1)} mm`]);
+      const okC = P.slotD + 2 * B.c + 8 <= P.collarD;
+      checks.push([okC, okC ? `Puck Ø${P.slotD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too tight around the Ø${P.slotD} puck`]);
+    } else {
+      const okH = P.holeD < P.collarD - 4;
+      checks.push([okH, okH ? `Socket Ø${P.holeD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too small for the Ø${P.holeD} socket`]);
+    }
+    if (B.minHClamped) checks.push([false, `Base raised to ${B.H.toFixed(0)} mm to fit the ${B.insert === 'socket' ? 'socket' : 'puck and cable'}`]);
+    if (B.ringClamped) checks.push([false, `Base top widened to Ø${(B.Rt * 2).toFixed(0)} mm to hold the twist lock`]);
+    if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
+  }
+  if (lightZ !== null && (P.mount === 'ring' || (twist && B.insert === 'socket'))) {
+    // bulb clearance: shade inner radius around the bulb height (assembly coords)
+    const off = twist ? B.f : 0;
+    let minR = 1e9;
+    for (let i = 0; i < S.M; i++) { const z = S.rowZ[i] + off; if (Math.abs(z - lightZ) < fit.bulbR) minR = Math.min(minR, S.rowMinIn[i]); }
+    const okB = minR > fit.bulbR + 15;
+    checks.push([okB, okB ? 'Bulb clearance OK — use LED bulbs only' : `Shade comes within ${Math.max(0, minR - fit.bulbR).toFixed(0)} mm of the bulb — LED only, keep ≥ 15 mm`]);
+  }
+  renderChecks(checks);
+
+  const parts = [`Shade Ø${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm · ≈${shadeG.toFixed(0)} g ${P.material}`];
+  if (baseBox) parts.push(`${B.adapter ? 'Adapter' : 'Base'} Ø${(2 * Math.max(B.Rt, B.Rb)).toFixed(0)} × ${B.H.toFixed(0)} mm · ≈${(baseVol / 1000 * dens).toFixed(0)} g`);
+  document.getElementById('dims').innerHTML = parts.join('<br>');
+  document.getElementById('expBase').hidden = !twist;
+  document.getElementById('expBase').textContent = B.adapter ? 'Export adapter STL' : 'Export base STL';
+  document.getElementById('tbExplode').hidden = !twist;
+
+  // floor + framing
+  root.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(assembly);
+  const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+  floor.position.set(ctr.x, bb.min.y - 0.5, ctr.z); floor.scale.setScalar(Math.max(size.x, size.z) * 0.75);
+  keyLight.target.position.copy(ctr);
+  if (firstFrame) { frame(bb); firstFrame = false; }
+  lastStats = { bb };
+  drawProfile();
+  save();
+}
+function frame(bb) {
+  const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+  const r = size.length() / 2;
+  const dist = r / Math.sin(camera.fov * DEG / 2) * 1.05;
+  controls.target.copy(ctr);
+  camera.position.set(ctr.x + dist * 0.55, ctr.y + dist * 0.35, ctr.z + dist * 0.76);
+  camera.near = dist / 50; camera.far = dist * 20; camera.updateProjectionMatrix();
+}
+function applyLight() {
+  const on = view3.light;
+  renderer.toneMappingExposure = on ? 0.8 : 1;
+  scene.environmentIntensity = on ? 0.06 : 1;
+  keyLight.intensity = on ? 0.05 : 1.2;
+  shadeMat.emissiveIntensity = connMat.emissiveIntensity = on ? 0.7 : 0;
+  glowMat.emissiveIntensity = on ? 2.5 : 0;
+  bulbLight.intensity = on ? 60000 : 0;
+  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)] : [];
+}
+
+let pending = false;
+function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); } }); }
+
+let saveT = 0;
+function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', JSON.stringify(P)); } catch (e) { /* storage unavailable */ } }, 400); }
+
+function renderChecks(list) {
+  document.getElementById('checks').innerHTML = list.map(([ok, txt]) => `<li class="${ok ? 'ok' : 'bad'}"><b>${ok ? '✓' : '!'}</b><span>${txt}</span></li>`).join('');
+}
+
+// ---------------------------------------------------------------- profile editor
+const pc = document.createElement('canvas'); pc.id = 'profileCanvas';
+const pctx = pc.getContext('2d');
+let drag = -1;
+function profMap() {
+  const w = pc.clientWidth, h = pc.clientHeight;
+  const sc = Math.min((w / 2 - 14) / 165, (h - 30) / P.height);
+  return { w, h, sc, cx: w / 2, by: h - 16 };
+}
+function drawProfile() {
+  if (!pc.isConnected) return;
+  const dpr = devicePixelRatio || 1, { w, h, sc, cx, by } = profMap();
+  if (pc.width !== Math.round(w * dpr)) { pc.width = Math.round(w * dpr); pc.height = Math.round(h * dpr); }
+  const ctx = pctx; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(document.documentElement);
+  const line = cs.getPropertyValue('--line'), muted = cs.getPropertyValue('--muted'), acc = cs.getPropertyValue('--accent'), warn = cs.getPropertyValue('--warn');
+  ctx.strokeStyle = line; ctx.lineWidth = 1;
+  for (let r = 0; r <= 160; r += 20) { for (const s of [1, -1]) { ctx.beginPath(); ctx.moveTo(cx + s * r * sc, by); ctx.lineTo(cx + s * r * sc, by - P.height * sc); ctx.stroke(); } }
+  for (let z = 0; z <= P.height; z += 20) { ctx.beginPath(); ctx.moveTo(cx - 160 * sc, by - z * sc); ctx.lineTo(cx + 160 * sc, by - z * sc); ctx.stroke(); }
+  const prof = buildProfile(), n = prof.length - 1, Wd = P.width;
+  const X = (r, s = 1) => cx + s * r * Wd * sc, Y = t => by - t * P.height * sc;
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) ctx.lineTo(X(prof[i]), Y(i / n));
+  for (let i = n; i >= 0; i--) ctx.lineTo(X(prof[i], -1), Y(i / n));
+  ctx.closePath(); ctx.fillStyle = acc; ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 1;
+  const lim = Math.tan(P.overhang * DEG);
+  ctx.lineWidth = 2;
+  for (const s of [1, -1]) for (let i = 0; i < n; i++) {
+    const slope = Math.abs(prof[i + 1] - prof[i]) * Wd / (P.height / n);
+    ctx.strokeStyle = slope > lim ? warn : acc;
+    ctx.beginPath(); ctx.moveTo(X(prof[i], s), Y(i / n)); ctx.lineTo(X(prof[i + 1], s), Y((i + 1) / n)); ctx.stroke();
+  }
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = muted; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, by + 4); ctx.lineTo(cx, by - P.height * sc - 4); ctx.stroke(); ctx.setLineDash([]);
+  for (const [t, r] of P.profile) {
+    ctx.beginPath(); ctx.arc(X(r), Y(t), 5.5, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = acc; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.fillStyle = muted; ctx.font = '11px -apple-system, sans-serif';
+  const conn = P.orient === 'pendant' ? 1 : 0;
+  ctx.fillText(P.mount === 'none' ? '' : '◆ connector end', 8, Y(conn) + (conn ? 12 : -4));
+  ctx.textAlign = 'right';
+  ctx.fillText(`Ø ${(prof[0] * 2 * Wd).toFixed(0)} bottom · Ø ${(prof[n] * 2 * Wd).toFixed(0)} top · ${P.height} mm`, w - 8, 14);
+  ctx.textAlign = 'left';
+}
+function pickPoint(e) {
+  const r = pc.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, { sc, cx, by } = profMap();
+  let best = -1, bd = 12;
+  P.profile.forEach(([t, rr], i) => { const d = Math.hypot(Math.abs(x - cx) - rr * P.width * sc, y - (by - t * P.height * sc)); if (d < bd) { bd = d; best = i; } });
+  return { best, x, y, sc, cx, by };
+}
+pc.addEventListener('pointerdown', e => { if (e.button !== 0) return; const p = pickPoint(e); if (p.best >= 0) { drag = p.best; pc.setPointerCapture(e.pointerId); } });
+pc.addEventListener('pointermove', e => {
+  if (drag < 0) return;
+  P.profile.sort((a, b) => a[0] - b[0]);
+  const { x, y, sc, cx, by } = pickPoint(e);
+  const pts = P.profile, last = pts.length - 1;
+  const r = Math.min(160, Math.max(8, Math.abs(x - cx) / sc / P.width));
+  let t = (by - y) / (P.height * sc);
+  if (drag === 0) t = 0; else if (drag === last) t = 1;
+  else t = Math.min(pts[drag + 1][0] - 0.02, Math.max(pts[drag - 1][0] + 0.02, t));
+  pts[drag] = [t, r];
+  invalidate();
+});
+pc.addEventListener('pointerup', () => { drag = -1; });
+pc.addEventListener('dblclick', e => {
+  const { best, x, y, sc, cx, by } = pickPoint(e);
+  if (best >= 0) return;
+  const t = (by - y) / (P.height * sc);
+  if (t <= 0.02 || t >= 0.98) return;
+  P.profile.push([t, Math.min(160, Math.max(8, Math.abs(x - cx) / sc / P.width))]);
+  P.profile.sort((a, b) => a[0] - b[0]);
+  invalidate();
+});
+pc.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const { best } = pickPoint(e);
+  P.profile.sort((a, b) => a[0] - b[0]);
+  if (best > 0 && best < P.profile.length - 1) { P.profile.splice(best, 1); invalidate(); }
+});
+
+// ---------------------------------------------------------------- controls
+const controlsList = [];
+function reg(el, when, sync) { controlsList.push({ el, when, sync }); return el; }
+function refreshAll() { for (const c of controlsList) { if (c.when) c.el.hidden = !c.when(); c.sync?.(); } }
+function changed(key, v, structural) { setK(key, v); sideEffects(key); if (structural) refreshAll(); invalidate(); }
+
+function h3(parent, text, when) { const e = document.createElement('h3'); e.textContent = text; parent.append(e); return reg(e, when); }
+function note(parent, text, when) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
+function slider(parent, label, key, min, max, step, unit = '', when) {
+  const row = document.createElement('div'); row.className = 'ctl';
+  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
+  const [rg, nb] = row.querySelectorAll('input');
+  const sync = () => { const v = getK(key); rg.value = v; nb.value = +(+v).toFixed(2); };
+  rg.addEventListener('input', () => { nb.value = rg.value; changed(key, +rg.value); });
+  nb.addEventListener('change', () => { const v = +nb.value; if (!Number.isFinite(v)) return sync(); rg.value = v; changed(key, v); });
+  parent.append(row); sync();
+  return reg(row, when, sync);
+}
+function select(parent, label, key, options, when) {
+  const row = document.createElement('div'); row.className = 'ctl wide';
+  row.innerHTML = `<label>${label}</label><select>${Object.entries(options).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>`;
+  const s = row.querySelector('select');
+  const sync = () => { s.value = getK(key); };
+  s.addEventListener('change', () => changed(key, s.value, true));
+  parent.append(row); sync();
+  return reg(row, when, sync);
+}
+function segmented(parent, label, key, options, when) {
+  const row = document.createElement('div'); row.className = 'ctl wide';
+  row.innerHTML = `<label>${label}</label><div class="seg">${Object.entries(options).map(([k, v]) => `<button data-v="${k}">${v}</button>`).join('')}</div>`;
+  const bs = [...row.querySelectorAll('button')];
+  const sync = () => bs.forEach(b => b.classList.toggle('on', b.dataset.v === String(getK(key))));
+  bs.forEach(b => b.addEventListener('click', () => changed(key, b.dataset.v, true)));
+  parent.append(row); sync();
+  return reg(row, when, sync);
+}
+function toggleRow(parent, label, key, when) {
+  const row = document.createElement('div'); row.className = 'ctl wide';
+  row.innerHTML = `<label>${label}</label><div><label class="switch"><input type="checkbox"><span></span></label></div>`;
+  const cb = row.querySelector('input');
+  const sync = () => { cb.checked = !!getK(key); };
+  cb.addEventListener('change', () => changed(key, cb.checked, true));
+  parent.append(row); sync();
+  return reg(row, when, sync);
+}
+function colorRow(parent, label, key) {
+  const row = document.createElement('div'); row.className = 'ctl wide';
+  row.innerHTML = `<label>${label}</label><input type="color" style="width:56px;height:26px;border:0;background:none">`;
+  const c = row.querySelector('input');
+  const sync = () => { c.value = getK(key); };
+  c.addEventListener('input', () => changed(key, c.value));
+  parent.append(row); sync();
+  return reg(row, null, sync);
+}
+function card(parent, title, key, when) {
+  const el = document.createElement('div'); el.className = 'card';
+  el.innerHTML = `<div class="cardhead"><span>${title}</span>${key ? '<label class="switch"><input type="checkbox"><span></span></label>' : ''}</div>`;
+  if (key) {
+    const cb = el.querySelector('input');
+    reg(el, when, () => { cb.checked = !!getK(key); el.classList.toggle('off', !cb.checked); });
+    cb.addEventListener('change', () => { el.classList.toggle('off', !cb.checked); changed(key, cb.checked); });
+  } else reg(el, when);
+  parent.append(el);
+  return el;
+}
+
+function sideEffects(key) {
+  if (key === 'fitting' && FITTINGS[P.fitting].hole) { P.holeD = FITTINGS[P.fitting].hole; P.socketD = FITTINGS[P.fitting].bodyD; }
+  if (key === 'holeD' || key === 'socketD') P.fitting = 'custom';
+  if (key === 'puck' && PUCKS[P.puck].d) { P.puckD = PUCKS[P.puck].d; P.puckH = PUCKS[P.puck].h; }
+  if (key === 'puckD' || key === 'puckH') P.puck = 'custom';
+  if ((key === 'puck' || key === 'insert' || key === 'puckD') && P.insert === 'puck' && P.collarD < P.puckD + 4) P.collarD = Math.ceil(P.puckD + 6);
+  if (key === 'insert' && P.insert === 'socket' && P.collarD < P.holeD + 12) P.collarD = Math.ceil(P.holeD + 24);
+  if (key === 'orient' && P.orient === 'pendant' && P.mount === 'twist') { P.baseType = 'adapter'; P.insert = 'socket'; if (P.collarD < P.holeD + 12) P.collarD = Math.ceil(P.holeD + 24); }
+  if (key.startsWith('pat.') && key.endsWith('.on')) refreshAll();
+}
+
+const twistOn = () => P.mount === 'twist';
+const ringOn = () => P.mount === 'ring';
+const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType === 'adapter' || P.orient === 'pendant');
+
+// Shape tab
+{
+  const p = document.getElementById('p-shape');
+  h3(p, 'Start from');
+  const grid = document.createElement('div'); grid.className = 'presets';
+  for (const name of Object.keys(PROFILES)) {
+    const b = document.createElement('button'); b.className = 'btn'; b.textContent = name;
+    b.onclick = () => { P.profile = clone(PROFILES[name]); invalidate(); };
+    grid.append(b);
+  }
+  p.append(grid);
+  const rnd = document.createElement('button'); rnd.className = 'btn'; rnd.style.cssText = 'width:100%;margin-top:6px'; rnd.textContent = '🎲 Randomize design';
+  rnd.onclick = randomize; p.append(rnd);
+  const wrap = document.createElement('div'); wrap.id = 'profileWrap'; wrap.append(pc);
+  const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Drag points to shape the silhouette · double-click to add · right-click to remove. Red = steeper than your overhang limit.';
+  wrap.append(hint); p.append(wrap);
+  h3(p, 'Size');
+  slider(p, 'Height', 'height', 50, 320, 1, 'mm');
+  slider(p, 'Width scale', 'width', 0.4, 2, 0.01, '×');
+  slider(p, 'Oval (depth/width)', 'aspect', 0.5, 1.5, 0.01, '×');
+  slider(p, 'Wall thickness', 'wall', 0.8, 4, 0.1, 'mm');
+  h3(p, 'Smoothness');
+  segmented(p, 'Profile curve', 'curve', { smooth: 'Smooth', linear: 'Straight' });
+  slider(p, 'Profile smoothing', 'smooth', 0, 1, 0.01);
+  h3(p, 'Cross-section');
+  slider(p, 'Sides (0 = round)', 'sides', 0, 12, 1);
+  slider(p, 'Corner rounding', 'round', 0, 1, 0.01, '', () => P.sides >= 3);
+  slider(p, 'Twist', 'twist', -360, 360, 1, '°');
+  segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
+}
+
+// Pattern tab
+{
+  const p = document.getElementById('p-pattern');
+  note(p, 'Patterns stack on top of each other and follow the twist. Negative depth carves grooves instead of ridges.');
+  let c = card(p, 'Vertical ribs', 'pat.ribs.on');
+  slider(c, 'Count', 'pat.ribs.count', 3, 120, 1); slider(c, 'Depth', 'pat.ribs.depth', -6, 6, 0.1, 'mm'); slider(c, 'Sharpness', 'pat.ribs.sharp', 0.2, 8, 0.05);
+  c = card(p, 'Spiral ribs', 'pat.spiral.on');
+  slider(c, 'Count', 'pat.spiral.count', 3, 120, 1); slider(c, 'Turns', 'pat.spiral.turns', -3, 3, 0.01); slider(c, 'Depth', 'pat.spiral.depth', -6, 6, 0.1, 'mm'); slider(c, 'Sharpness', 'pat.spiral.sharp', 0.2, 8, 0.05);
+  c = card(p, 'Horizontal rings', 'pat.rings.on');
+  slider(c, 'Count', 'pat.rings.count', 1, 100, 0.5); slider(c, 'Depth', 'pat.rings.depth', -6, 6, 0.1, 'mm'); slider(c, 'Sharpness', 'pat.rings.sharp', 0.2, 8, 0.05);
+  c = card(p, 'Wavy rings', 'pat.wavy.on');
+  slider(c, 'Rings', 'pat.wavy.count', 1, 60, 0.5); slider(c, 'Waves around', 'pat.wavy.waves', 1, 24, 1); slider(c, 'Wave height', 'pat.wavy.amp', 0, 6, 0.05); slider(c, 'Depth', 'pat.wavy.depth', -6, 6, 0.1, 'mm'); slider(c, 'Sharpness', 'pat.wavy.sharp', 0.2, 8, 0.05);
+  c = card(p, 'Diamonds', 'pat.diamond.on');
+  slider(c, 'Around', 'pat.diamond.count', 4, 80, 1); slider(c, 'Rows', 'pat.diamond.rows', 1, 50, 0.5); slider(c, 'Depth', 'pat.diamond.depth', -6, 6, 0.1, 'mm');
+  c = card(p, 'Bubbles', 'pat.bubbles.on');
+  slider(c, 'Around', 'pat.bubbles.count', 6, 60, 1); slider(c, 'Size', 'pat.bubbles.size', 0.3, 1.15, 0.01); slider(c, 'Depth', 'pat.bubbles.depth', -6, 6, 0.1, 'mm');
+  c = card(p, 'Organic noise', 'pat.noise.on');
+  slider(c, 'Feature size', 'pat.noise.scale', 4, 80, 0.5, 'mm'); slider(c, 'Depth', 'pat.noise.depth', 0, 8, 0.1, 'mm'); slider(c, 'Detail', 'pat.noise.octaves', 1, 5, 1); slider(c, 'Seed', 'pat.noise.seed', 1, 99, 1);
+  h3(p, 'Fade');
+  slider(p, 'At connector end', 'fadeConn', 0, 60, 0.5, 'mm');
+  slider(p, 'At open end', 'fadeOpen', 0, 60, 0.5, 'mm');
+}
+
+// Connector tab
+{
+  const p = document.getElementById('p-connector');
+  h3(p, 'Lamp');
+  segmented(p, 'Lamp type', 'orient', { table: 'Table / floor', pendant: 'Pendant' });
+  segmented(p, 'Connection', 'mount', { twist: 'Twist-lock', ring: 'Socket ring', none: 'None' });
+  note(p, '<b>Twist-lock</b>: the shade gets a collar with lugs that bayonet into a separate base or socket adapter — twist to lock, no tools. <b>Socket ring</b>: the shade clamps directly onto a lamp holder with its threaded shade ring.', () => P.mount !== 'none');
+
+  h3(p, 'Lamp holder', () => ringOn() || socketInsert());
+  select(p, 'Fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), () => ringOn() || socketInsert());
+  slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', () => ringOn() || socketInsert());
+  slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', () => (ringOn() || socketInsert()));
+  slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', () => ringOn() || socketInsert());
+  note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', () => ringOn() || socketInsert());
+
+  h3(p, 'Shade ring', ringOn);
+  segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
+  slider(p, 'Spokes', 'spokes', 2, 8, 1, '', () => ringOn() && P.ringStyle === 'spokes');
+  slider(p, 'Spoke width', 'spokeW', 3, 16, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
+  slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
+
+  h3(p, 'Base', twistOn);
+  segmented(p, 'Part', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
+  note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
+  segmented(p, 'Light source', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, () => twistOn() && P.baseType === 'table' && P.orient !== 'pendant');
+  const puckOn = () => twistOn() && !socketInsert() && P.insert === 'puck';
+  const slotOn = () => twistOn() && !socketInsert() && P.insert === 'slot';
+  select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
+  slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
+  slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
+  note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once it is through, turn it flat and it rests on the floor around the slot, held in a shallow seat.', slotOn);
+  slider(p, 'Puck Ø', 'slotD', 15, 80, 0.5, 'mm', slotOn);
+  slider(p, 'Puck thickness', 'slotH', 2, 20, 0.1, 'mm', slotOn);
+  slider(p, 'Slot width', 'slotW', 3, 20, 0.1, 'mm', slotOn);
+  slider(p, 'Seat depth', 'seatDepth', 0.6, 8, 0.1, 'mm', slotOn);
+  slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', slotOn);
+  slider(p, 'Base bottom Ø', 'baseD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+  slider(p, 'Base top Ø', 'baseTopD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+  slider(p, 'Base height', 'baseH', 15, 150, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+  slider(p, 'Cable slot', 'cableW', 3, 12, 0.5, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+
+  h3(p, 'Twist lock', twistOn);
+  slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
+  slider(p, 'Collar wall', 'collarWall', 1.6, 5, 0.1, 'mm', twistOn);
+  slider(p, 'Collar height', 'collarH', 8, 30, 0.5, 'mm', twistOn);
+  slider(p, 'Lugs', 'lugs', 2, 6, 1, '', twistOn);
+  slider(p, 'Lug width', 'lugW', 8, 50, 1, '°', twistOn);
+  slider(p, 'Lug height', 'lugH', 2, 8, 0.1, 'mm', twistOn);
+  slider(p, 'Lug depth', 'lugDepth', 1, 4, 0.1, 'mm', twistOn);
+  slider(p, 'Turn to lock', 'turn', 10, 60, 1, '°', twistOn);
+  slider(p, 'Clearance', 'clearance', 0.1, 0.8, 0.05, 'mm', twistOn);
+  toggleRow(p, 'Click detent', 'detent', twistOn);
+  note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
+}
+
+// Print tab
+{
+  const p = document.getElementById('p-print');
+  h3(p, 'Printer');
+  select(p, 'Printer', 'printer', Object.fromEntries(Object.entries(PRINTERS).map(([k, v]) => [k, v.label])));
+  segmented(p, 'Material', 'material', { PLA: 'PLA', PETG: 'PETG' });
+  slider(p, 'Overhang limit', 'overhang', 35, 70, 1, '°');
+  note(p, '45° is safe on any printer; 55–65° works with good part cooling.');
+  h3(p, 'Colors');
+  colorRow(p, 'Shade', 'color');
+  colorRow(p, 'Base', 'baseColor');
+  h3(p, 'Quality');
+  slider(p, 'Preview segments', 'previewRes', 72, 360, 6);
+  slider(p, 'Preview row step', 'previewLayer', 0.4, 3, 0.1, 'mm');
+  segmented(p, 'Export mesh', 'exportQ', { standard: 'Standard', fine: 'Fine', ultra: 'Ultra' });
+  h3(p, 'Design file');
+  const row = document.createElement('div'); row.className = 'presets'; row.style.gridTemplateColumns = 'repeat(2,1fr)';
+  const mk = (t, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = t; b.onclick = fn; row.append(b); return b; };
+  mk('Save design…', () => download(new Blob([JSON.stringify(P, null, 1)], { type: 'application/json' }), 'lamp-design.json'));
+  const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json'; file.hidden = true;
+  file.onchange = async () => { try { P = merge(clone(DEFAULT), JSON.parse(await file.files[0].text())); refreshAll(); invalidate(); } catch (e) { alert('Could not read that design file.'); } file.value = ''; };
+  mk('Open design…', () => file.click());
+  mk('Copy link', async () => { const url = location.href.split('#')[0] + '#d=' + btoa(unescape(encodeURIComponent(JSON.stringify(P)))); try { await navigator.clipboard.writeText(url); } catch (e) { prompt('Copy this link:', url); } });
+  mk('Reset all', () => { if (confirm('Reset every setting to the defaults?')) { P = clone(DEFAULT); refreshAll(); invalidate(); } });
+  p.append(row, file);
+  h3(p, 'Slicer tips');
+  note(p, 'Print the shade connector-end down, supports off, 0.2 mm layers, 3 walls, 0% infill (the wall is solid). The base prints upright; bridges over the cable slot are short. Use LED bulbs only — PLA softens around 55 °C.');
+}
+
+document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.panel').forEach(x => x.classList.toggle('on', x.id === 'p-' + b.dataset.tab));
+  if (b.dataset.tab === 'shape') drawProfile();
+}));
+
+// toolbar
+const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); invalidate(); });
+tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
+document.getElementById('tbReset').onclick = () => { if (lastStats) frame(lastStats.bb); };
+
+function randomize() {
+  const pick = a => a[Math.floor(Math.random() * a.length)], rr = (a, b) => a + Math.random() * (b - a);
+  P.profile = clone(PROFILES[pick(Object.keys(PROFILES))]).map(([t, r]) => [t, Math.max(30, r * rr(0.85, 1.15))]);
+  P.height = Math.round(rr(120, 200));
+  P.sides = Math.random() < 0.3 ? Math.round(rr(4, 9)) : 0; P.round = rr(0.1, 0.6);
+  P.twist = Math.random() < 0.4 ? Math.round(rr(-120, 120)) : 0;
+  for (const k in P.pat) P.pat[k].on = false;
+  const choices = Object.keys(P.pat), first = pick(choices);
+  P.pat[first].on = true;
+  if (Math.random() < 0.35) P.pat[pick(choices)].on = true;
+  const pt = P.pat;
+  pt.ribs.count = Math.round(rr(12, 60)); pt.ribs.sharp = rr(0.6, 4); pt.ribs.depth = rr(1, 3.5);
+  pt.spiral.count = Math.round(rr(10, 48)); pt.spiral.turns = rr(-1, 1); pt.spiral.depth = rr(1, 3.5);
+  pt.rings.count = rr(8, 40); pt.wavy.count = rr(6, 24); pt.wavy.waves = Math.round(rr(3, 10)); pt.wavy.amp = rr(0.5, 3);
+  pt.diamond.count = Math.round(rr(10, 30)); pt.diamond.rows = rr(5, 16);
+  pt.bubbles.count = Math.round(rr(10, 26)); pt.noise.seed = Math.round(rr(1, 99)); pt.noise.scale = rr(10, 40);
+  refreshAll(); invalidate();
+}
+
+// ---------------------------------------------------------------- export
+function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+function stlBlob(mesh) {
+  const v = mesh.vertProperties, t = mesh.triVerts, np = mesh.numProp, nt = t.length / 3;
+  const buf = new ArrayBuffer(84 + 50 * nt), dv = new DataView(buf);
+  new Uint8Array(buf, 0, 80).set(new TextEncoder().encode('Illuminate3D STL'));
+  dv.setUint32(80, nt, true);
+  let o = 84;
+  for (let i = 0; i < nt; i++) {
+    const a = t[i * 3] * np, b = t[i * 3 + 1] * np, c = t[i * 3 + 2] * np;
+    const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2], wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx; const l = Math.hypot(nx, ny, nz) || 1;
+    dv.setFloat32(o, nx / l, true); dv.setFloat32(o + 4, ny / l, true); dv.setFloat32(o + 8, nz / l, true); o += 12;
+    for (const k of [a, b, c]) { dv.setFloat32(o, v[k], true); dv.setFloat32(o + 4, v[k + 1], true); dv.setFloat32(o + 8, v[k + 2], true); o += 12; }
+    o += 2;
+  }
+  return new Blob([buf], { type: 'model/stl' });
+}
+const QUALITY = { standard: { n: 240, layer: 0.8, seg: 128 }, fine: { n: 360, layer: 0.5, seg: 192 }, ultra: { n: 540, layer: 0.3, seg: 256 } };
+const busy = document.getElementById('busy');
+async function runExport(which) {
+  if (!W) return;
+  busy.textContent = 'Building watertight mesh…'; busy.classList.add('on');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const q = QUALITY[P.exportQ];
+    const blob = gcScope(() => {
+      let man;
+      if (which === 'shade') {
+        const S = buildShade(q.n, q.layer);
+        const body = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
+        const conn = shadeConnector(S, q.seg);
+        man = conn ? keep(body.add(conn)) : body;
+      } else man = buildBase(q.seg);
+      if (man.status() !== 'NoError' || man.isEmpty()) throw new Error('Mesh error: ' + man.status());
+      return stlBlob(man.getMesh());
+    });
+    const B = baseDims();
+    download(blob, which === 'shade' ? 'lamp-shade.stl' : (B.adapter ? 'lamp-adapter.stl' : 'lamp-base.stl'));
+  } catch (e) { console.error(e); alert('Export failed: ' + e.message + '\nTry reducing pattern depth or increasing wall thickness.'); }
+  busy.classList.remove('on');
+}
+document.getElementById('expShade').onclick = () => runExport('shade');
+document.getElementById('expBase').onclick = () => runExport('base');
+
+// ---------------------------------------------------------------- boot
+refreshAll();
+document.getElementById('tbOver').classList.toggle('on', view3.over);
+busy.classList.add('on');
+update();
+Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
+  .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
+window.__lamp = { get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+</script>
+</body>
+</html>

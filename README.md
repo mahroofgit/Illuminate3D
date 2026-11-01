@@ -1,0 +1,38 @@
+# Illuminate3D
+
+A browser-based designer for 3D-printable lampshades and their fittings. Shape the shade, layer surface patterns, pick how it connects to the light, and export watertight STL files ready for the slicer.
+
+**Live app:** https://mahroofgit.github.io/Illuminate3D/
+
+## Features
+
+- **Freeform shape** – drag a silhouette profile, set height, width, oval, wall thickness, polygon sides with corner rounding, and twist (linear / ease / wave). Profile smoothing for soft curves.
+- **Surface patterns** (stackable) – vertical ribs, spiral ribs, horizontal rings, wavy rings, diamonds, bubbles, organic noise, each with depth and sharpness, fading out near the connector.
+- **Connectors**
+  - *Socket ring* – clamps straight onto an E27, E14, B22, M10 nipple or custom holder (spokes or solid disc).
+  - *Twist-lock* – bayonet collar on the shade with 45° chamfered lugs and an optional click detent; locks into a separate part:
+    - **Table base** with an LED puck pocket, a **slot-in puck** seat (push a small puck up edgewise through a slot, turn it flat), or a bulb-socket mount with a holder cavity.
+    - **Socket adapter** for pendants.
+- **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance, weight estimate.
+- Viewer with cutaway, exploded view and a lamp-on preview. Designs autosave in the browser and can be saved/opened as JSON or shared as a link.
+
+## Printing tips
+
+Print the shade connector-end down, supports off, 0.2 mm layers, 3 walls, 0% infill. Bases print upright. Start the twist-lock at 0.3 mm clearance (0.4 mm for PETG). Measure your holder and puck with calipers — the built-in sizes are typical values. Use LED bulbs only.
+
+## Running locally
+
+The app is a single `index.html` with its libraries in `vendor/`, so it works offline. Browsers won't load modules from `file://`, so serve the folder:
+
+```bash
+python3 -m http.server 8000
+```
+
+then open http://localhost:8000.
+
+## Built with
+
+- [three.js](https://threejs.org) r180 – 3D preview (MIT)
+- [Manifold](https://github.com/elalish/manifold) 3.5.1 – watertight CSG for the connectors and export (Apache-2.0)
+
+Licenses for both are included in `vendor/`.
