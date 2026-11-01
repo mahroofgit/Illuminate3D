@@ -653,7 +653,9 @@ const lockSlack = () => (P.clearance / (P.collarD / 2 + P.collarWall)) / DEG + 0
 const baseInsert = () => (P.baseType === 'adapter' || P.orient === 'pendant') ? 'socket' : P.insert;
 // cable-grip beads run from just outside the light-source opening (under the cover ramp there's extra headroom)
 const GRIP_MIN = 4;
-const gripStart = B => Math.max(baseFeatureR(B), coverActive(B) ? coverEdge(B) : 0) + 1.5;
+// outermost radius the cover cuts into the wall: its lock grooves for a round cover, else its own edge
+const coverOuter = B => { const k = coverShape(B); return k.rect ? k.hx : coverLock(B).gv; };
+const gripStart = B => Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0) + 1.5;
 function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
   if (B.adapter) return 0;
   if (B.insert === 'puck') return P.puckD / 2 + B.c + 7;
@@ -683,7 +685,7 @@ const LIMITS = {
     // the side is a straight taper, so it must also still be ≥ groove radius + 3 mm at the twist-lock floor height
     const t = B.f / B.H, need = B.gr1 + 3, groove = t < 1 ? (need - B.Rt * t) / (1 - t) : need;
     const grip = !B.adapter && P.cableGrip ? gripStart(B) + GRIP_MIN + 2 + P.footChamfer : 0;
-    const lo = Math.max(lean, wall + (coverActive(B) ? 1 : 0), grip, groove, 20);
+    const lo = Math.max(lean, wall, coverActive(B) ? coverOuter(B) + 2.4 : 0, grip, groove, 20);
     const why = lo === lean ? `a narrower bottom would make the side lean out past your ${P.overhang}° overhang limit.`
       : lo === groove ? `the tapered side has to stay 3 mm thick around the twist-lock grooves near the floor.`
       : lo === grip ? `the cable channel needs room for the snap-in grip between the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} and the rim.`
@@ -737,10 +739,11 @@ const coverEdge = B => { const k = coverShape(B); return k.rect ? k.hx : k.R; };
 // 0.1 mm tight (zt1) with the cover flush — so it locks solid like a bottle cap instead of rattling.
 // The lug's top outer edge has a 45° bevel x that seats against the 45° groove roof, so locking also centres the cover.
 function coverLock(B) {
-  const k = coverShape(B), R = k.R, c = B.c, d = 1.2, lh = 1.2, T = P.coverT, x = 0.6;
+  const k = coverShape(B), R = k.R, c = B.c, d = 2, lh = 1.5, T = P.coverT, x = 0.6;
+  const lugA = Math.min(10 / R / DEG, 30);   // ~10 mm wide lugs (capped so three of them plus their turn still fit)
   const ro = R - c + d, g = ro + 0.15;                // lug outer radius; groove outer radius (roof meets it at zr)
   const zr1 = T - x - P.coverFit - (g - ro), zr0 = zr1 + 0.6 + P.coverFit;  // roof at lock (coverFit mm squeeze on the bevel) / at entry
-  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr0, zr1, zv: T + 2 * c, lugA: (6 / R) / DEG, turn: 28, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
+  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr0, zr1, zv: T + 2 * c, lugA, turn: lugA + 18, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
 }
 function coverCuts(B, seg) {
   const k = coverShape(B), out = [];
