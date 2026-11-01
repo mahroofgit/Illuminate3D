@@ -34,7 +34,32 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 aside { display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; }
 header { padding: 14px 16px 10px; display: flex; align-items: baseline; gap: 8px; }
 header h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
-header span { color: var(--muted); font-size: 12px; }
+#projName { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 2px 6px; border-radius: 6px; cursor: text; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#projName:hover { background: var(--panel-2); color: var(--text); }
+#projDirty { color: var(--accent); font-size: 10px; visibility: hidden; }
+#projDirty.on { visibility: visible; }
+#filebar { display: flex; gap: 4px; padding: 0 12px 10px; }
+#filebar button { flex: 1; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 5px 0; font: inherit; font-size: 12px; cursor: pointer; }
+#filebar button:hover { border-color: var(--accent); }
+#toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#toast.on { opacity: 1; }
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 10; padding: 16px; }
+#modal[hidden] { display: none; }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: min(860px, 100%); max-height: 86vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.sheethead, .sheetfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.sheethead h2 { margin: 0; font-size: 16px; }
+.sheetfoot { border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; justify-content: flex-start; }
+#projGrid { overflow-y: auto; padding: 4px 16px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.pcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+.pcard.cur { border-color: var(--accent); }
+.pcard img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #1c1c1e; cursor: pointer; }
+.pcard .pmeta { padding: 8px 10px 4px; }
+.pcard .pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .pdate { color: var(--muted); font-size: 11px; }
+.pcard .pact { display: flex; gap: 4px; padding: 6px 8px 8px; }
+.pcard .pact button { flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; padding: 4px 0; border-radius: 5px; cursor: pointer; }
+.pcard .pact button:hover { background: var(--panel); color: var(--text); }
+.pempty { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 40px 0; }
 nav { display: flex; gap: 4px; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
 nav button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
 nav button.on { background: var(--accent-soft); color: var(--accent); }
@@ -81,6 +106,7 @@ main canvas { display: block; width: 100%; height: 100%; }
 #toolbar button { border: 0; background: transparent; color: var(--text); padding: 6px 10px; border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 #toolbar button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 #toolbar button[hidden] { display: none; }
+.tbsep { width: 1px; background: var(--line); margin: 4px 2px; }
 #dims { position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 #busy { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.25); color: #fff; font-weight: 600; font-size: 14px; }
 #busy.on { display: grid; }
@@ -102,7 +128,13 @@ main canvas { display: block; width: 100%; height: 100%; }
 <body>
 <div id="app">
   <aside>
-    <header><h1>Illuminate3D</h1><span>printable lampshades &amp; fittings</span></header>
+    <header><h1>Illuminate3D</h1><button id="projName" title="Rename project"></button><span id="projDirty" title="Unsaved changes">●</span></header>
+    <div id="filebar">
+      <button id="fNew" title="Start a new design">New</button>
+      <button id="fOpen" title="Open a saved project (⌘O)">Open…</button>
+      <button id="fSave" title="Save (⌘S)">Save</button>
+      <button id="fSaveAs" title="Save a copy under a new name">Save as…</button>
+    </div>
     <nav id="tabs">
       <button data-tab="shape" class="on">Shape</button>
       <button data-tab="pattern">Pattern</button>
@@ -125,6 +157,10 @@ main canvas { display: block; width: 100%; height: 100%; }
   </aside>
   <main id="view">
     <div id="toolbar">
+      <button id="tbShade" class="on" title="Show or hide the shade">Shade</button>
+      <button id="tbBase" class="on" title="Show or hide the base">Base</button>
+      <button id="tbHw" class="on" title="Show or hide the socket, bulb or puck">Hardware</button>
+      <span class="tbsep"></span>
       <button id="tbOver" class="on">Overhangs</button>
       <button id="tbCut">Cutaway</button>
       <button id="tbExplode">Explode</button>
@@ -133,7 +169,18 @@ main canvas { display: block; width: 100%; height: 100%; }
     </div>
     <div id="dims"></div>
     <div id="busy">Loading geometry engine…</div>
+    <div id="toast"></div>
   </main>
+</div>
+<div id="modal" hidden>
+  <div class="sheet" role="dialog" aria-label="Projects">
+    <div class="sheethead"><h2>Projects</h2><button class="btn" id="mClose">Close</button></div>
+    <div id="projGrid"></div>
+    <div class="sheetfoot">
+      <button class="btn" id="mImport">Import .json…</button>
+      <span>Projects are saved in this browser. Export a .json file to back them up or move them to another device.</span>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -196,7 +243,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
   baseD: 116, baseTopD: 96, baseH: 42, cableW: 5,
@@ -208,7 +255,17 @@ const clone = o => JSON.parse(JSON.stringify(o));
 function merge(dst, src) { for (const k in src) { if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k]) && dst[k] && typeof dst[k] === 'object') merge(dst[k], src[k]); else if (k in dst) dst[k] = src[k]; } return dst; }
 
 let P = clone(DEFAULT);
-try { const h = location.hash.slice(1); if (h.startsWith('d=')) merge(P, JSON.parse(decodeURIComponent(escape(atob(h.slice(2)))))); else { const s = localStorage.getItem('lampstudio'); if (s) merge(P, JSON.parse(s)); } } catch (e) { /* ignore bad saved state */ }
+// cur: the open project. snap is the design as last saved/opened; it differs from P when there are unsaved changes.
+let cur = { id: null, name: 'Untitled lamp', snap: null };
+try { Object.assign(cur, JSON.parse(localStorage.getItem('illum.current')) || {}); } catch (e) { /* no current project */ }
+try {
+  const h = location.hash.slice(1);
+  if (h.startsWith('d=')) {
+    merge(P, JSON.parse(decodeURIComponent(escape(atob(h.slice(2))))));
+    cur = { id: null, name: 'Shared design', snap: null };
+    history.replaceState(null, '', location.pathname + location.search);
+  } else { const s = localStorage.getItem('lampstudio'); if (s) merge(P, JSON.parse(s)); else cur.snap = JSON.stringify(P); }
+} catch (e) { /* ignore bad saved state */ }
 
 const getK = k => k.split('.').reduce((o, p) => o[p], P);
 const setK = (k, v) => { const ps = k.split('.'); const last = ps.pop(); ps.reduce((o, p) => o[p], P)[last] = v; };
@@ -465,15 +522,22 @@ function baseDims() {
   const boreR = Ro + c, gr1 = Ro + P.lugDepth + c, ringMin = gr1 + 2.4, boreDepth = P.collarH - 0.5;
   const adapter = P.baseType === 'adapter' || P.orient === 'pendant';
   const insert = adapter ? 'socket' : P.insert;
-  let H, f, Rt, Rb;
+  let H, f, Rt, Rb, minH = 0, minParts = '';
   if (adapter) { H = boreDepth + P.plateT; f = P.plateT; Rt = Rb = ringMin + 0.6; }
   else {
-    const slotH = P.seatDepth + P.slotPlateT + (P.slotD / 2 + c + 4 - P.slotW / 2) + 3;
-    const minH = boreDepth + (insert === 'puck' ? P.puckH + P.cableW + 2 : insert === 'slot' ? slotH : P.plateT + 24);
+    // Minimum height = twist-lock socket depth + whatever the light source needs underneath it.
+    let need;
+    if (insert === 'puck') need = [['puck pocket', P.puckH], ['cable channel', P.cableW + 2]];
+    else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', P.seatDepth], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + 4 - P.slotW / 2], ['clearance', 3]];
+    else if (insert === 'slot') need = [['seat', P.seatDepth], ['cable channel', P.cableW + 1.5]];
+    else need = [['socket plate', P.plateT], ['holder cavity', 24]];
+    need.unshift(['twist-lock socket', boreDepth]);
+    minH = need.reduce((a, [, v]) => a + v, 0);
+    minParts = need.map(([k, v]) => `${k} ${+v.toFixed(1)}`).join(' + ');
     H = Math.max(P.baseH, minH); f = H - boreDepth;
     Rt = Math.max(P.baseTopD / 2, ringMin); Rb = Math.max(P.baseD / 2, 20);
   }
-  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
+  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
 }
 
 function slotDims(B) {
@@ -500,15 +564,18 @@ function buildBase(seg) {
     cut.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, f - P.puckH));
     cut.push(tr(cyl(f - P.puckH + 1.2, P.cableW / 2, P.cableW / 2, 32), 0, 0, -1));
   } else if (B.insert === 'slot') {
-    // Puck seat on a thin floor with a slot: push the puck up edgewise through the slot, turn it flat, it rests on the floor.
-    // Below the slot a 45° funnel guides the puck in and keeps the ceiling printable without supports.
+    // Puck seat with a slot under it: push the puck up edgewise through the slot, turn it flat, it rests around the slot.
+    // 'straight' runs the slot down to the bottom (lowest base); 'funnel' adds a 45° funnel below a thin floor for finger room.
     const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2;
     cut.push(tr(cyl(P.seatDepth + 0.01, hx, hx, seg), 0, 0, s.zSeat));
+    if (P.slotStyle !== 'funnel') { cut.push(tr(box(2 * hx, P.slotW, s.zSeat + 1.01), -hx, -hw, -1)); }
+    else {
     cut.push(tr(box(2 * hx, P.slotW, P.slotPlateT + 0.02), -hx, -hw, s.zPlateBot - 0.01));
     const ring = tr(cyl(0.01, s.cavR, s.cavR, seg), 0, 0, s.zFunnel);
     const neck = tr(box(2 * hx, P.slotW, 0.01), -hx, -hw, s.zPlateBot - 0.01);
     cut.push(keep(W.Manifold.hull([ring, neck])));
     cut.push(tr(cyl(s.zFunnel + 1.01, s.cavR, s.cavR, seg), 0, 0, -1));
+    }
   } else {
     const hr = P.holeD / 2;
     cut.push(tr(cyl(P.plateT + 2, hr, hr, seg), 0, 0, f - P.plateT - 1));
@@ -555,20 +622,24 @@ const baseGroup = new THREE.Group(); assembly.add(baseGroup);
 const ghostGroup = new THREE.Group(); assembly.add(ghostGroup);
 assembly.add(bulbLight);
 
-const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, emissive: 0xffa040, emissiveIntensity: 0 });
-const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.DoubleSide, emissive: 0xffa040, emissiveIntensity: 0 });
-const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.DoubleSide });
+const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
+const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
+const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.FrontSide });
+// Cutaway caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
+const capShadeMat = new THREE.MeshBasicMaterial({ color: 0xe8893a, side: THREE.BackSide });
+const capBaseMat = new THREE.MeshBasicMaterial({ color: 0x9c6b45, side: THREE.BackSide });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
-const view3 = { over: true, cut: false, explode: false, light: false };
-let shadeMesh = null, firstFrame = true;
+const view3 = { over: true, cut: false, explode: false, light: false, shade: true, base: true, hw: true };
+let firstFrame = true;
 
 function resize() { const r = view.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe(view);
 resize();
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 
+function addSolid(g, geo, mat, cap) { g.add(new THREE.Mesh(geo, mat)); if (view3.cut) g.add(new THREE.Mesh(geo, cap)); }
 function clearGroup(g) { for (const c of [...g.children]) { if (c.isLight) continue; g.remove(c); c.geometry?.dispose(); } }
 function manifoldToGeo(man) {
   const mesh = man.getMesh(), np = mesh.numProp, v = mesh.vertProperties, t = mesh.triVerts;
@@ -614,15 +685,15 @@ function update() {
   geo.computeVertexNormals();
   const ov = analyse(S, geo);
   clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup);
-  shadeMesh = new THREE.Mesh(geo, shadeMat); shadeGroup.add(shadeMesh);
+  addSolid(shadeGroup, geo, shadeMat, capShadeMat);
   connMat.color.set(P.color); baseMat.color.set(P.baseColor);
 
   let connVol = 0, baseVol = 0, baseBox = null;
   const B = baseDims();
   if (W) gcScope(() => {
     const c = shadeConnector(S, 96);
-    if (c) { shadeGroup.add(new THREE.Mesh(manifoldToGeo(c), connMat)); connVol = c.volume(); }
-    if (P.mount === 'twist') { const b = buildBase(96); baseGroup.add(new THREE.Mesh(manifoldToGeo(b), baseMat)); baseVol = b.volume(); baseBox = b.boundingBox(); }
+    if (c) { addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat); connVol = c.volume(); }
+    if (P.mount === 'twist') { const b = buildBase(96); addSolid(baseGroup, manifoldToGeo(b), baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox(); }
   });
 
   // place parts (assembly coords: base print frame, Z up)
@@ -631,6 +702,7 @@ function update() {
   shadeGroup.position.set(0, 0, twist ? B.f + ex : 0);
   shadeGroup.rotation.z = twist && !view3.explode ? -P.turn * DEG : 0;
   assembly.rotation.x = P.orient === 'pendant' ? Math.PI : 0;
+  shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw;
 
   // ghost hardware: socket + bulb, or LED puck
   const fit = FITTINGS[P.fitting] || FITTINGS.E27;
@@ -682,7 +754,7 @@ function update() {
       const okH = P.holeD < P.collarD - 4;
       checks.push([okH, okH ? `Socket Ø${P.holeD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too small for the Ø${P.holeD} socket`]);
     }
-    if (B.minHClamped) checks.push([false, `Base raised to ${B.H.toFixed(0)} mm to fit the ${B.insert === 'socket' ? 'socket' : 'puck and cable'}`]);
+    if (B.minHClamped) checks.push([false, `Base raised to ${B.H.toFixed(1)} mm, the minimum for this setup: ${B.minParts}`]);
     if (B.ringClamped) checks.push([false, `Base top widened to Ø${(B.Rt * 2).toFixed(0)} mm to hold the twist lock`]);
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
@@ -702,6 +774,7 @@ function update() {
   document.getElementById('expBase').hidden = !twist;
   document.getElementById('expBase').textContent = B.adapter ? 'Export adapter STL' : 'Export base STL';
   document.getElementById('tbExplode').hidden = !twist;
+  document.getElementById('tbBase').hidden = !twist;
 
   // floor + framing
   root.updateMatrixWorld(true);
@@ -712,6 +785,7 @@ function update() {
   if (firstFrame) { frame(bb); firstFrame = false; }
   lastStats = { bb };
   drawProfile();
+  updateTitle();
   save();
 }
 function frame(bb) {
@@ -737,7 +811,7 @@ let pending = false;
 function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); } }); }
 
 let saveT = 0;
-function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', JSON.stringify(P)); } catch (e) { /* storage unavailable */ } }, 400); }
+function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', JSON.stringify(P)); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
 
 function renderChecks(list) {
   document.getElementById('checks').innerHTML = list.map(([ok, txt]) => `<li class="${ok ? 'ok' : 'bad'}"><b>${ok ? '✓' : '!'}</b><span>${txt}</span></li>`).join('');
@@ -825,6 +899,7 @@ pc.addEventListener('contextmenu', e => {
 
 // ---------------------------------------------------------------- controls
 const controlsList = [];
+let importInput = null;   // hidden file input for .json import (created in the Print tab)
 function reg(el, when, sync) { controlsList.push({ el, when, sync }); return el; }
 function refreshAll() { for (const c of controlsList) { if (c.when) c.el.hidden = !c.when(); c.sync?.(); } }
 function changed(key, v, structural) { setK(key, v); sideEffects(key); if (structural) refreshAll(); invalidate(); }
@@ -988,15 +1063,16 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
   slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
-  note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once it is through, turn it flat and it rests on the floor around the slot, held in a shallow seat.', slotOn);
+  note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once its top edge pokes out, pull it up, turn it flat, and it rests around the slot in a shallow seat.', slotOn);
+  segmented(p, 'Under the slot', 'slotStyle', { straight: 'Straight (low base)', funnel: 'Finger funnel' }, slotOn);
   slider(p, 'Puck Ø', 'slotD', 15, 80, 0.5, 'mm', slotOn);
   slider(p, 'Puck thickness', 'slotH', 2, 20, 0.1, 'mm', slotOn);
   slider(p, 'Slot width', 'slotW', 3, 20, 0.1, 'mm', slotOn);
   slider(p, 'Seat depth', 'seatDepth', 0.6, 8, 0.1, 'mm', slotOn);
-  slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', slotOn);
+  slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
   slider(p, 'Base bottom Ø', 'baseD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
   slider(p, 'Base top Ø', 'baseTopD', 50, 240, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
-  slider(p, 'Base height', 'baseH', 15, 150, 1, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
+  slider(p, 'Base height', 'baseH', 10, 150, 0.5, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
   slider(p, 'Cable slot', 'cableW', 3, 12, 0.5, 'mm', () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant'));
 
   h3(p, 'Twist lock', twistOn);
@@ -1029,15 +1105,16 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Preview row step', 'previewLayer', 0.4, 3, 0.1, 'mm');
   segmented(p, 'Export mesh', 'exportQ', { standard: 'Standard', fine: 'Fine', ultra: 'Ultra' });
   h3(p, 'Design file');
+  note(p, 'Use New / Open / Save at the top to manage projects. Export a .json file to back up or share a design.');
   const row = document.createElement('div'); row.className = 'presets'; row.style.gridTemplateColumns = 'repeat(2,1fr)';
   const mk = (t, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = t; b.onclick = fn; row.append(b); return b; };
-  mk('Save design…', () => download(new Blob([JSON.stringify(P, null, 1)], { type: 'application/json' }), 'lamp-design.json'));
+  mk('Export .json…', () => exportJSON(cur.name, P));
   const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json'; file.hidden = true;
-  file.onchange = async () => { try { P = merge(clone(DEFAULT), JSON.parse(await file.files[0].text())); refreshAll(); invalidate(); } catch (e) { alert('Could not read that design file.'); } file.value = ''; };
-  mk('Open design…', () => file.click());
+  file.onchange = () => { importJSON(file.files[0]); file.value = ''; };
+  mk('Import .json…', () => file.click());
   mk('Copy link', async () => { const url = location.href.split('#')[0] + '#d=' + btoa(unescape(encodeURIComponent(JSON.stringify(P)))); try { await navigator.clipboard.writeText(url); } catch (e) { prompt('Copy this link:', url); } });
-  mk('Reset all', () => { if (confirm('Reset every setting to the defaults?')) { P = clone(DEFAULT); refreshAll(); invalidate(); } });
   p.append(row, file);
+  importInput = file;
   h3(p, 'Slicer tips');
   note(p, 'Print the shade connector-end down, supports off, 0.2 mm layers, 3 walls, 0% infill (the wall is solid). The base prints upright; bridges over the cable slot are short. Use LED bulbs only — PLA softens around 55 °C.');
 }
@@ -1050,7 +1127,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); invalidate(); });
-tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
+tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
 document.getElementById('tbReset').onclick = () => { if (lastStats) frame(lastStats.bb); };
 
 function randomize() {
@@ -1071,6 +1148,113 @@ function randomize() {
   pt.bubbles.count = Math.round(rr(10, 26)); pt.noise.seed = Math.round(rr(1, 99)); pt.noise.scale = rr(10, 40);
   refreshAll(); invalidate();
 }
+
+// ---------------------------------------------------------------- projects
+const isDirty = () => JSON.stringify(P) !== cur.snap;
+function loadProjects() { try { return JSON.parse(localStorage.getItem('illum.projects')) || []; } catch (e) { return []; } }
+function storeProjects(list) {
+  try { localStorage.setItem('illum.projects', JSON.stringify(list)); return true; }
+  catch (e) { alert('Could not save: browser storage is full. Export some projects as .json, then delete them here.'); return false; }
+}
+function persistCur() { try { localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }
+function updateTitle() {
+  const d = isDirty();
+  document.getElementById('projName').textContent = cur.name;
+  document.getElementById('projDirty').classList.toggle('on', d);
+  document.title = (d ? '• ' : '') + cur.name + ' — Illuminate3D';
+}
+let toastT = 0;
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1800); }
+function thumbnail() {
+  update();   // a rebuild may still be queued (e.g. right after New/Open)
+  renderer.render(scene, camera);
+  const src = renderer.domElement, c = document.createElement('canvas'), w = 240, h = 180;
+  c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.fillStyle = '#1c1c1e'; x.fillRect(0, 0, w, h);
+  const sc = Math.max(w / src.width, h / src.height);
+  x.drawImage(src, (w - src.width * sc) / 2, (h - src.height * sc) / 2, src.width * sc, src.height * sc);
+  return c.toDataURL('image/jpeg', 0.8);
+}
+function confirmDiscard() { return !isDirty() || confirm(`Discard unsaved changes to “${cur.name}”?`); }
+function loadDesign(data, meta) {
+  P = merge(clone(DEFAULT), clone(data));
+  cur = { id: null, name: 'Untitled lamp', ...meta, snap: JSON.stringify(P) };
+  persistCur(); refreshAll(); firstFrame = true; invalidate();
+}
+function saveProject(asNew) {
+  let name = cur.name;
+  if (asNew || !cur.id) {
+    const n = prompt('Project name', asNew && cur.id ? cur.name + ' copy' : cur.name);
+    if (n === null) return;
+    name = n.trim() || 'Untitled lamp';
+  }
+  const id = asNew || !cur.id ? 'p' + Date.now().toString(36) : cur.id;
+  const list = loadProjects(), entry = { id, name, updated: Date.now(), thumb: thumbnail(), data: clone(P) };
+  const i = list.findIndex(q => q.id === id);
+  if (i >= 0) list[i] = entry; else list.unshift(entry);
+  if (!storeProjects(list)) return;
+  cur = { id, name, snap: JSON.stringify(P) };
+  persistCur(); updateTitle(); toast(`Saved “${name}”`);
+}
+function exportJSON(name, data) {
+  const file = (name || 'lamp').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lamp';
+  download(new Blob([JSON.stringify({ app: 'Illuminate3D', version: 1, name, data }, null, 1)], { type: 'application/json' }), file + '.json');
+}
+async function importJSON(f) {
+  if (!f || !confirmDiscard()) return;
+  try {
+    const j = JSON.parse(await f.text());
+    const data = j.app === 'Illuminate3D' ? j.data : j;
+    loadDesign(data, { id: null, name: j.name || f.name.replace(/\.json$/i, '') });
+    cur.snap = null; persistCur(); updateTitle();
+    closeProjects(); toast('Imported — press Save to keep it in your projects');
+  } catch (e) { alert('Could not read that design file.'); }
+}
+function renderProjects() {
+  const grid = document.getElementById('projGrid'), list = loadProjects().sort((a, b) => b.updated - a.updated);
+  grid.innerHTML = list.length ? '' : '<div class="pempty">No saved projects yet. Press Save to keep the current design here.</div>';
+  for (const q of list) {
+    const el = document.createElement('div'); el.className = 'pcard' + (q.id === cur.id ? ' cur' : '');
+    el.innerHTML = `<img alt=""><div class="pmeta"><div class="pname"></div><div class="pdate"></div></div><div class="pact"><button data-a="open">Open</button><button data-a="rename">Rename</button><button data-a="export">Export</button><button data-a="delete">Delete</button></div>`;
+    el.querySelector('img').src = q.thumb || '';
+    el.querySelector('.pname').textContent = q.name;
+    el.querySelector('.pdate').textContent = new Date(q.updated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + (q.id === cur.id ? ' · open now' : '');
+    const act = a => {
+      const all = loadProjects(), it = all.find(x => x.id === q.id);
+      if (!it) return renderProjects();
+      if (a === 'open') { if (q.id !== cur.id || isDirty()) { if (!confirmDiscard()) return; loadDesign(it.data, { id: it.id, name: it.name }); } closeProjects(); }
+      if (a === 'rename') { const n = prompt('Rename project', it.name); if (n && n.trim()) { it.name = n.trim(); storeProjects(all); if (cur.id === it.id) { cur.name = it.name; persistCur(); updateTitle(); } renderProjects(); } }
+      if (a === 'export') exportJSON(it.name, it.data);
+      if (a === 'delete' && confirm(`Delete “${it.name}”? This cannot be undone.`)) { storeProjects(all.filter(x => x.id !== it.id)); if (cur.id === it.id) { cur.id = null; cur.snap = null; persistCur(); updateTitle(); } renderProjects(); }
+    };
+    el.querySelector('img').onclick = () => act('open');
+    el.querySelectorAll('.pact button').forEach(b => b.onclick = () => act(b.dataset.a));
+    grid.append(el);
+  }
+}
+function openProjects() { renderProjects(); document.getElementById('modal').hidden = false; }
+function closeProjects() { document.getElementById('modal').hidden = true; }
+document.getElementById('fNew').onclick = () => { if (confirmDiscard()) { loadDesign(DEFAULT, { id: null, name: 'Untitled lamp' }); toast('New design'); } };
+document.getElementById('fOpen').onclick = openProjects;
+document.getElementById('fSave').onclick = () => saveProject(false);
+document.getElementById('fSaveAs').onclick = () => saveProject(true);
+document.getElementById('projName').onclick = () => {
+  const n = prompt('Project name', cur.name);
+  if (!n || !n.trim()) return;
+  cur.name = n.trim();
+  if (cur.id) { const all = loadProjects(), it = all.find(x => x.id === cur.id); if (it) { it.name = cur.name; storeProjects(all); } }
+  persistCur(); updateTitle();
+};
+document.getElementById('mClose').onclick = closeProjects;
+document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeProjects(); });
+document.getElementById('mImport').onclick = () => importInput.click();
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeProjects();
+  if (!(e.metaKey || e.ctrlKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); saveProject(e.shiftKey); }
+  if (k === 'o') { e.preventDefault(); openProjects(); }
+});
 
 // ---------------------------------------------------------------- export
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }

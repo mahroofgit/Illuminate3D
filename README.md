@@ -11,10 +11,11 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
 - **Connectors**
   - *Socket ring* – clamps straight onto an E27, E14, B22, M10 nipple or custom holder (spokes or solid disc).
   - *Twist-lock* – bayonet collar on the shade with 45° chamfered lugs and an optional click detent; locks into a separate part:
-    - **Table base** with an LED puck pocket, a **slot-in puck** seat (push a small puck up edgewise through a slot, turn it flat), or a bulb-socket mount with a holder cavity.
+    - **Table base** with an LED puck pocket, a **slot-in puck** seat (push a small puck up edgewise through a slot, turn it flat; straight slot for a low base or a finger funnel), or a bulb-socket mount with a holder cavity.
     - **Socket adapter** for pendants.
 - **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance, weight estimate.
-- Viewer with cutaway, exploded view and a lamp-on preview. Designs autosave in the browser and can be saved/opened as JSON or shared as a link.
+- **Projects** – New / Open / Save / Save as (⌘S, ⌘O) with thumbnails, stored in the browser; export and import `.json` files to back up or move designs.
+- Viewer with solid-section cutaway, exploded view, lamp-on preview, and toggles to show or hide the shade, base and hardware.
 
 ## Printing tips
 
