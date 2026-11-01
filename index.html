@@ -641,6 +641,7 @@ const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (he
 // Round covers (funnel, holder cavity) twist-lock like the shade: three lugs on the cover's top edge go up vertical
 // slots in the cavity wall, a twist carries them along a groove, and they rest on the ledge below it behind a small
 // bump. The groove roofs are 45° and the cover exports upside down, so nothing needs supports.
+const coverEdge = B => { const k = coverShape(B); return k.rect ? k.hx : k.R; };   // where the channel leaves the opening
 function coverLock(B) {
   const k = coverShape(B), R = k.R, c = B.c, d = 1.2, lh = 1.2, T = P.coverT;
   return { R, c, d, lh, T, zb: T - lh - c, zt: T + c, lugA: (6 / R) / DEG, turn: 28, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
@@ -728,7 +729,14 @@ function buildBase(seg) {
   if (!B.adapter) {
     // cable channel with an arched roof (prints without support)
     const hw = P.cableW / 2;
-    ins.push(keep(W.Manifold.hull([tr(box(B.Rb + 2, P.cableW, Math.max(0.02, P.cableW - hw)), 0, -hw, -0.01), tr(rot(cyl(B.Rb + 2, hw, hw, 32), [0, 90, 0]), 0, 0, P.cableW - hw)])));
+    const chan = (x, len, dz) => [tr(box(len, P.cableW, Math.max(0.02, P.cableW - hw)), x, -hw, dz - 0.01), tr(rot(cyl(len, hw, hw, 32), [0, 90, 0]), x, 0, dz + P.cableW - hw)];
+    ins.push(keep(W.Manifold.hull(chan(0, B.Rb + 2, 0))));
+    if (coverActive(B)) {
+      // the cable lies on top of the cover, so where the channel leaves the opening it starts a cover-thickness higher
+      // and ramps back down at 45° (printable roof) to the normal channel
+      const X = coverEdge(B);
+      ins.push(keep(W.Manifold.hull([...chan(X - 3, 3.5, P.coverT), ...chan(X + 0.5 + P.coverT, 0.01, 0)])));
+    }
   }
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
   result = sub(result, uni(ins));
@@ -741,7 +749,7 @@ function buildBase(seg) {
     // shrink the beads until the cable, cradled on top of them, still fits under the channel roof
     const cableTop = r => r * Math.SQRT2 + Math.sqrt(Math.max(0, (r + rc) ** 2 - hw * hw)) + rc;
     let r = (P.cableW - gap) / 2; while (r > 0.4 && cableTop(r) > P.cableW - 0.1) r -= 0.05;
-    const x0 = baseFeatureR(B) + 1.5, x1 = B.Rb - 2 - P.footChamfer, span = x1 - x0;
+    const x0 = Math.max(baseFeatureR(B) + 1.5, coverActive(B) ? coverEdge(B) + P.coverT + 1.5 : 0), x1 = B.Rb - 2 - P.footChamfer, span = x1 - x0;
     const L = Math.min(8, span >= 12 ? (span - 4) / 2 : span), beads = [];
     if (r > 0.4 && L >= 3) {
       const starts = span >= 12 ? [x1 - L, x0] : [x0];
