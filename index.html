@@ -41,6 +41,8 @@ header h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
 #filebar { display: flex; gap: 4px; padding: 0 12px 10px; }
 #filebar button { flex: 1; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 5px 0; font: inherit; font-size: 12px; cursor: pointer; }
 #filebar button:hover { border-color: var(--accent); }
+#filebar button.icon { flex: 0 0 34px; display: grid; place-items: center; }
+#filebar button:disabled { opacity: .35; cursor: default; border-color: var(--line); }
 #toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 #toast.on { opacity: 1; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 10; padding: 16px; }
@@ -73,7 +75,9 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .ctl.wide { grid-template-columns: 112px 1fr; }
 .ctl label { color: var(--muted); font-size: 12px; }
 .ctl .lim { display: block; font-size: 10px; color: var(--accent); }
-.ctl .limhint { grid-column: 1 / -1; margin-top: -3px; font-size: 11px; color: var(--accent); line-height: 1.35; }
+.ctl .lim { cursor: help; }
+.ctl .lim .warn { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: 4px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800; vertical-align: 1px; }
+#tipbox { position: fixed; z-index: 30; max-width: 260px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 12px; line-height: 1.4; pointer-events: none; display: none; }
 .ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=number], select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
@@ -136,6 +140,8 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button id="fOpen" title="Open a saved project (⌘O)">Open…</button>
       <button id="fSave" title="Save (⌘S)">Save</button>
       <button id="fSaveAs" title="Save a copy under a new name">Save as…</button>
+      <button id="fUndo" class="icon" title="Undo (⌘Z)" aria-label="Undo" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="fRedo" class="icon" title="Redo (⇧⌘Z)" aria-label="Redo" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
     </div>
     <nav id="tabs">
       <button data-tab="shape" class="on">Shape</button>
@@ -172,6 +178,7 @@ main canvas { display: block; width: 100%; height: 100%; }
     <div id="dims"></div>
     <div id="busy">Loading geometry engine…</div>
     <div id="toast"></div>
+    <div id="tipbox"></div>
   </main>
 </div>
 <div id="modal" hidden>
@@ -578,14 +585,22 @@ const LIMITS = {
     return [2 * lo, 240, why];
   },
 };
+// intent holds the value the user actually chose for each limited setting; P holds the value in effect after the
+// limits. Limits never overwrite intent, so when a limit relaxes the setting returns to what the user picked.
+let intent = null;
+const LIMITED = () => Object.keys(LIMITS);
+function initIntent() { intent = {}; for (const k of LIMITED()) intent[k] = getK(k); }
+function designState() { const d = clone(P); if (intent) for (const k in intent) d[k] = intent[k]; return d; }
+const designJSON = () => JSON.stringify(designState());
 function applyConstraints() {
+  if (!intent) initIntent();
   let changed = false;
   for (const k in LIMITS) {
-    const [lo, hi0] = LIMITS[k](), hi = Math.max(lo, hi0), v = getK(k);
+    const [lo, hi0] = LIMITS[k](), hi = Math.max(lo, hi0), v = intent[k], cur0 = getK(k);
     let nv = v;
     if (v < lo - 1e-9) nv = Math.ceil(lo * 100) / 100;
     else if (v > hi + 1e-9) nv = Math.max(Math.floor(hi * 100) / 100, Math.ceil(lo * 100) / 100);
-    if (nv !== v) { setK(k, nv); changed = true; }
+    if (nv !== cur0) { setK(k, nv); changed = true; }
   }
   return changed;
 }
@@ -845,7 +860,32 @@ function update() {
   lastStats = { bb };
   drawProfile();
   updateTitle();
+  scheduleHistory();
   save();
+}
+
+// ---------------------------------------------------------------- undo / redo
+// Snapshots of the design (user values) taken ~0.4 s after changes settle, so a slider drag is one step.
+let hist = [], hi = -1, histT = 0;
+function resetHistory() { clearTimeout(histT); hist = [designJSON()]; hi = 0; updateUndoButtons(); }
+function commitHistory() {
+  clearTimeout(histT);
+  const s = designJSON();
+  if (hi >= 0 && s === hist[hi]) return;
+  hist = hist.slice(0, hi + 1); hist.push(s);
+  if (hist.length > 200) hist.shift();
+  hi = hist.length - 1; updateUndoButtons();
+}
+function scheduleHistory() { if (hi < 0) return resetHistory(); clearTimeout(histT); histT = setTimeout(commitHistory, 400); }
+function restoreHistory(i) {
+  hi = i; P = merge(clone(DEFAULT), JSON.parse(hist[hi])); initIntent();
+  refreshAll(); invalidate(); updateUndoButtons();
+}
+function undo() { commitHistory(); if (hi > 0) restoreHistory(hi - 1); }
+function redo() { commitHistory(); if (hi < hist.length - 1) restoreHistory(hi + 1); }
+function updateUndoButtons() {
+  document.getElementById('fUndo').disabled = hi <= 0;
+  document.getElementById('fRedo').disabled = hi >= hist.length - 1;
 }
 function frame(bb) {
   const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
@@ -870,7 +910,7 @@ let pending = false;
 function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); toast('Could not rebuild the model: ' + e.message); } }); }
 
 let saveT = 0;
-function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', JSON.stringify(P)); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
+function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', designJSON()); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
 
 function renderChecks(list) {
   document.getElementById('checks').innerHTML = list.map(([ok, txt]) => `<li class="${ok ? 'ok' : 'bad'}"><b>${ok ? '✓' : '!'}</b><span>${txt}</span></li>`).join('');
@@ -961,23 +1001,28 @@ const controlsList = [];
 let importInput = null;   // hidden file input for .json import (created in the Print tab)
 function reg(el, when, sync) { controlsList.push({ el, when, sync }); return el; }
 function refreshAll() { for (const c of controlsList) { if (c.when) c.el.hidden = !c.when(); c.sync?.(); } }
-function changed(key, v, structural) { setK(key, v); sideEffects(key); if (structural) refreshAll(); invalidate(); }
+function changed(key, v, structural) { setK(key, v); if (intent && key in LIMITS) intent[key] = v; sideEffects(key); if (structural) refreshAll(); invalidate(); }
 
 function h3(parent, text, when) { const e = document.createElement('h3'); e.textContent = text; parent.append(e); return reg(e, when); }
 function note(parent, text, when) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
 function slider(parent, label, key, min, max, step, unit = '', when) {
   const row = document.createElement('div'); row.className = 'ctl';
-  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}"><div class="limhint" hidden></div>`;
-  const [rg, nb] = row.querySelectorAll('input'), lab = row.querySelector('label'), hint = row.querySelector('.limhint');
+  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
+  const [rg, nb] = row.querySelectorAll('input'), lab = row.querySelector('label');
   const sync = () => {
     const v = getK(key), lim = LIMITS[key]?.();
     if (lim) {
       const lo = Math.max(min, lim[0]), hi = Math.max(lo, lim[1]);
       rg.min = nb.min = lo; rg.max = nb.max = hi;
       const atMin = lim[0] > min && v <= lo + 0.01, atMax = lim[1] < max && v >= hi - 0.01;
-      lab.innerHTML = label + (lim[0] > min ? `<small class="lim">min ${fmt(lo)}</small>` : '');
-      hint.hidden = !(atMin || atMax);
-      hint.textContent = (atMin ? 'At its minimum: ' : 'At its maximum: ') + lim[2];
+      const tip = (atMin ? 'At its minimum: ' : atMax ? 'At its maximum: ' : 'Limited because ') + lim[2];
+      const tags = [lim[0] > min ? `min ${fmt(lo)}` : '', atMax ? `max ${fmt(hi)}` : ''].filter(Boolean).join(' · ');
+      lab.textContent = label;
+      if (tags) {
+        const sm = document.createElement('small'); sm.className = 'lim'; sm.dataset.tip = tip; sm.textContent = tags;
+        if (atMin || atMax) { const b = document.createElement('b'); b.className = 'warn'; b.textContent = '!'; sm.append(b); }
+        lab.append(sm);
+      }
     }
     rg.value = v; nb.value = +(+v).toFixed(2);
   };
@@ -1039,9 +1084,7 @@ function sideEffects(key) {
   if (key === 'holeD' || key === 'socketD') P.fitting = 'custom';
   if (key === 'puck' && PUCKS[P.puck].d) { P.puckD = PUCKS[P.puck].d; P.puckH = PUCKS[P.puck].h; }
   if (key === 'puckD' || key === 'puckH') P.puck = 'custom';
-  if ((key === 'puck' || key === 'insert' || key === 'puckD') && P.insert === 'puck' && P.collarD < P.puckD + 4) P.collarD = Math.ceil(P.puckD + 6);
-  if (key === 'insert' && P.insert === 'socket' && P.collarD < P.holeD + 12) P.collarD = Math.ceil(P.holeD + 24);
-  if (key === 'orient' && P.orient === 'pendant' && P.mount === 'twist') { P.baseType = 'adapter'; P.insert = 'socket'; if (P.collarD < P.holeD + 12) P.collarD = Math.ceil(P.holeD + 24); }
+  if (key === 'orient' && P.orient === 'pendant' && P.mount === 'twist') { P.baseType = 'adapter'; P.insert = 'socket'; }
   if (key.startsWith('pat.') && key.endsWith('.on')) refreshAll();
 }
 
@@ -1178,11 +1221,11 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Use New / Open / Save at the top to manage projects. Export a .json file to back up or share a design.');
   const row = document.createElement('div'); row.className = 'presets'; row.style.gridTemplateColumns = 'repeat(2,1fr)';
   const mk = (t, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = t; b.onclick = fn; row.append(b); return b; };
-  mk('Export .json…', () => exportJSON(cur.name, P));
+  mk('Export .json…', () => exportJSON(cur.name, designState()));
   const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json'; file.hidden = true;
   file.onchange = () => { importJSON(file.files[0]); file.value = ''; };
   mk('Import .json…', () => file.click());
-  mk('Copy link', async () => { const url = location.href.split('#')[0] + '#d=' + btoa(unescape(encodeURIComponent(JSON.stringify(P)))); try { await navigator.clipboard.writeText(url); } catch (e) { prompt('Copy this link:', url); } });
+  mk('Copy link', async () => { const url = location.href.split('#')[0] + '#d=' + btoa(unescape(encodeURIComponent(designJSON()))); try { await navigator.clipboard.writeText(url); } catch (e) { prompt('Copy this link:', url); } });
   p.append(row, file);
   importInput = file;
   h3(p, 'Slicer tips');
@@ -1220,7 +1263,7 @@ function randomize() {
 }
 
 // ---------------------------------------------------------------- projects
-const isDirty = () => JSON.stringify(P) !== cur.snap;
+const isDirty = () => designJSON() !== cur.snap;
 function loadProjects() { try { return JSON.parse(localStorage.getItem('illum.projects')) || []; } catch (e) { return []; } }
 function storeProjects(list) {
   try { localStorage.setItem('illum.projects', JSON.stringify(list)); return true; }
@@ -1248,7 +1291,9 @@ function thumbnail() {
 function confirmDiscard() { return !isDirty() || confirm(`Discard unsaved changes to “${cur.name}”?`); }
 function loadDesign(data, meta) {
   P = merge(clone(DEFAULT), clone(data));
-  cur = { id: null, name: 'Untitled lamp', ...meta, snap: JSON.stringify(P) };
+  initIntent();
+  cur = { id: null, name: 'Untitled lamp', ...meta, snap: designJSON() };
+  resetHistory();
   persistCur(); refreshAll(); firstFrame = true; invalidate();
 }
 function saveProject(asNew) {
@@ -1259,11 +1304,11 @@ function saveProject(asNew) {
     name = n.trim() || 'Untitled lamp';
   }
   const id = asNew || !cur.id ? 'p' + Date.now().toString(36) : cur.id;
-  const list = loadProjects(), entry = { id, name, updated: Date.now(), thumb: thumbnail(), data: clone(P) };
+  const list = loadProjects(), entry = { id, name, updated: Date.now(), thumb: thumbnail(), data: designState() };
   const i = list.findIndex(q => q.id === id);
   if (i >= 0) list[i] = entry; else list.unshift(entry);
   if (!storeProjects(list)) return;
-  cur = { id, name, snap: JSON.stringify(P) };
+  cur = { id, name, snap: designJSON() };
   persistCur(); updateTitle(); toast(`Saved “${name}”`);
 }
 function exportJSON(name, data) {
@@ -1324,7 +1369,23 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 's') { e.preventDefault(); saveProject(e.shiftKey); }
   if (k === 'o') { e.preventDefault(); openProjects(); }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) && document.activeElement.type !== 'range';
+  if ((k === 'z' || k === 'y') && !typing) { e.preventDefault(); (k === 'y' || e.shiftKey) ? redo() : undo(); }
 });
+document.getElementById('fUndo').onclick = undo;
+// hover (or tap) a "min …" tag to see why the limit is there
+const tipbox = document.getElementById('tipbox');
+function showTip(el) {
+  tipbox.textContent = el.dataset.tip; tipbox.style.display = 'block';
+  const r = el.getBoundingClientRect(), w = tipbox.offsetWidth;
+  tipbox.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
+  tipbox.style.top = (r.bottom + 6) + 'px';
+}
+document.addEventListener('mouseover', e => { const el = e.target.closest?.('[data-tip]'); if (el) showTip(el); });
+document.addEventListener('mousemove', e => { if (tipbox.style.display === 'block' && !e.target.closest?.('[data-tip]')) tipbox.style.display = 'none'; });
+document.getElementById('panels').addEventListener('scroll', () => { tipbox.style.display = 'none'; });
+document.addEventListener('click', e => { const el = e.target.closest?.('[data-tip]'); if (el) { e.preventDefault(); showTip(el); } else tipbox.style.display = 'none'; });
+document.getElementById('fRedo').onclick = redo;
 
 // ---------------------------------------------------------------- export
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
