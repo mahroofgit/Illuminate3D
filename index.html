@@ -988,8 +988,9 @@ const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (he
 // slots in the cavity wall, a twist carries them along a groove, and they rest on the ledge below it behind a small
 // bump. The groove roofs are 45° and the cover exports upside down, so nothing needs supports.
 const coverEdge = B => { const k = coverShape(B); return k.rect ? k.hx : k.R; };   // where the channel leaves the opening
-// The groove roof is a ramp: the lugs go in with play (zt0) and the twist wedges them down onto the ledge, finishing
-// 0.1 mm tight (zt1) with the cover flush — so it locks solid like a bottle cap instead of rattling.
+// The groove roof has play (zt0) for most of the twist, like the collar lock, then a short ramp near the end wedges the
+// lugs' leading ends down onto the ledge (zt1, `coverFit` mm tight) with the cover flush — so it turns freely and only
+// snugs up in the last few degrees, like a bottle cap, instead of rattling.
 // The lug's top outer edge has a 45° bevel x that seats against the 45° groove roof, so locking also centres the cover.
 function coverLock(B) {
   const k = coverShape(B), R = k.R, c = B.c, d = 2, lh = 1.5, T = P.coverT, x = 0.6;
@@ -1007,12 +1008,13 @@ function coverCuts(B, seg) {
     return out;
   }
   const L = coverLock(B), { R, g, zb, zr0: zt0, zr1: zt1, lugA, turn, ca } = L;
-  const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, L.zv], [R - 0.3, L.zv]];
+  const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, L.zv], [R - 0.3, L.zv + L.gv - R + 0.3]];   // 45° roof: no flat overhang
   const hPoly = z => [[R - 0.3, zb], [g, zb], [g, z], [R, z + (g - R)], [R - 0.3, z + (g - R)]];
   const slice = (th, z) => hPoly(z).map(([r, zz]) => [r * Math.cos(th * DEG), r * Math.sin(th * DEG), zz]);
   for (const a of L.at) {
     const a0 = a - turn - lugA / 2 - ca, a2 = a + lugA / 2 + ca;   // groove start (entry slot) and end
-    const t0 = a - turn + lugA / 2, t1 = a - lugA / 2;              // ramp runs while the lug's leading edge travels in
+    // tight pad under the lug's leading end at lock (~4 mm), reached over a ~2.5 mm ramp; play everywhere before it
+    const padA = Math.min(lugA / 2, (4 / R) / DEG), t1 = a + lugA / 2 - padA, t0 = t1 - (2.5 / R) / DEG;
     out.push(rotZ(revolve(vPoly, lugA + 2 * ca, seg), a0));
     out.push(rotZ(revolve(hPoly(zt0), t0 - a0 + 0.1, seg), a0));
     out.push(rotZ(revolve(hPoly(zt1), a2 - t1 + 0.1, seg), t1 - 0.1));
@@ -1890,7 +1892,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
   slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
   slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
-  note(p, 'How hard the twist-lock squeezes the cover when locked: 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
   note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
 
   h3(p, 'Ventilation', () => slotOn() || difSet());
@@ -2294,7 +2296,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
