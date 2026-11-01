@@ -562,7 +562,8 @@ function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
 }
 const fmt = v => +(+v).toFixed(1);
 const LIMITS = {
-  cableW: () => [P.cableD + 0.5, 12, `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
+  collarWall: () => [Math.max(1.6, P.wall), 5, `the collar should be at least as thick as the shade wall (${fmt(P.wall)} mm) so the joint isn't the weak point.`],
+  cableW: () => [P.cableD + (P.cableGrip && baseInsert() !== 'socket' ? 1.6 : 0.5), 12, P.cableGrip ? `the cable (${fmt(P.cableD)} mm) has to fit above the snap-in lips.` : `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
   seatDepth: () => [P.slotH, Math.max(8, P.slotH + 4), `the seat must be at least as deep as the puck is thick (${fmt(P.slotH)} mm) so it sits flush.`],
   slotW: () => [P.slotH + 2 * P.clearance, 20, `the slot must be wider than the puck thickness plus clearance so the puck fits through on its edge.`],
   collarH: () => [P.lugH + P.lugDepth + 3, 30, `the collar needs room for the ${fmt(P.lugH)} mm lug and the 45° chamfer above it.`],
@@ -654,13 +655,16 @@ function buildBase(seg) {
   if (!B.adapter) cut.push(tr(box(B.Rb + 2, P.cableW, P.cableW), 0, -P.cableW / 2, -0.01));
   let result = sub(body, uni(cut));
   if (!B.adapter && P.cableGrip) {
-    // Pinch nubs: pairs of half-buried pins on the channel walls leave a gap a little under the cable Ø,
-    // so the cable snaps in from below and stays put. Vertical, so they print without support.
-    const gap = Math.max(1, P.cableD - 0.4), rn = (P.cableW - gap) / 2, inner = baseFeatureR(B) + rn + 2;
-    const pins = [];
-    for (const x of [B.Rb - 5, B.Rb - 14]) if (x > inner && rn > 0.2)
-      for (const y of [-P.cableW / 2, P.cableW / 2]) pins.push(tr(cyl(P.cableW, rn, rn, 20), x, y, 0));
-    if (pins.length) result = keep(result.add(sub(uni(pins), sub(tr(cyl(P.cableW + 2, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
+    // Snap-in lips along the open bottom of the cable channel: the opening is narrower than the cable, so it pushes
+    // up past the lips and can't drop back out. The lips sit on the bed and their lead-in leans ~30°, so no supports.
+    const gap = Math.max(1, P.cableD - 0.6), p = (P.cableW - gap) / 2, lh = Math.min(1.6, P.cableW - P.cableD - 0.2);
+    const inner = baseFeatureR(B) + 2, L = 6, lips = [];
+    if (p > 0.2 && lh > 0.6) for (const x of [B.Rb - 4 - L, B.Rb - 16 - L]) if (x > inner)
+      for (const sgn of [-1, 1]) {
+        const y0 = sgn * P.cableW / 2, lip = (w, z, h) => tr(box(L, w + 0.2, h), x, sgn < 0 ? y0 - 0.2 : y0 - w, z);
+        lips.push(keep(W.Manifold.hull([lip(p * 0.35, 0, 0.01), lip(p, lh - 0.4, 0.4)])));
+      }
+    if (lips.length) result = keep(result.add(sub(uni(lips), sub(tr(cyl(P.cableW + 2, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
   }
   if (P.detent) {
     const bumps = [], len = g1 - (B.Ro + 0.3);
@@ -701,10 +705,12 @@ const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness:
 const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
 const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.FrontSide });
 // Cutaway caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
-const capShadeMat = new THREE.MeshBasicMaterial({ color: 0xe8893a, side: THREE.BackSide });
-const capBaseMat = new THREE.MeshBasicMaterial({ color: 0x9c6b45, side: THREE.BackSide });
-const capHwMat = new THREE.MeshBasicMaterial({ color: 0x7d93ad, side: THREE.BackSide });
-const capGlowMat = new THREE.MeshBasicMaterial({ color: 0xf3e2c4, side: THREE.BackSide });
+// polygonOffset pulls the section caps forward so they win over faces that touch them (collar on the shade, collar on the base floor)
+const capOpts = { side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+const capShadeMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xe8893a, side: THREE.BackSide });
+const capBaseMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x9c6b45, side: THREE.BackSide });
+const capHwMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x7d93ad, side: THREE.BackSide });
+const capGlowMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xf3e2c4, side: THREE.BackSide });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
@@ -1189,7 +1195,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
   slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
   toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
-  note(p, 'The channel under the base has pinch nubs that leave a gap 0.4 mm under the cable Ø: press the cable up into it and it clicks in and stays put.', () => tableBase() && P.cableGrip);
+  note(p, 'Snap-in lips along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out.', () => tableBase() && P.cableGrip);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
