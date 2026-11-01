@@ -298,7 +298,7 @@ const DEFAULT = {
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
-  lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentFit: 0.3,
+  lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
@@ -745,10 +745,18 @@ function skirtSolid(S) {
 // reaching `detentFit` mm into the collar. The collar has, at each rib: a full-height entry channel (the collar slides
 // down past the rib), a shallow relief track for the twist, a short unrecessed hump just before the end (the click),
 // and a lock groove the rib drops into. Heights are in shade coordinates (collar bottom = 0).
+// Preferred ('lug'): the rib stands in the base's lug groove instead, on its outer wall just behind where each lug comes
+// to rest. The lug's outer face rides over it near the end of the turn and drops behind it, so the collar needs no cuts.
+// It needs the turn to be longer than the lug, so the rib sits clear of the entry slot.
 function detentGeom() {
   if (!P.detent || P.mount !== 'twist') return null;
   const Ri = P.collarD / 2, Ro = Ri + P.collarWall, c = P.clearance, boreR = Ro + c;
   const fit = P.detentFit, rr = 1, d = fit + 0.05;   // rib radius; collar recess depth (0.05 mm clear when seated)
+  const Rl = Ro + P.lugDepth, m = ((rr + 0.4) / Rl) / DEG, ca = (c / Ro) / DEG + 0.6;
+  if (P.detentStyle !== 'collar' && P.turn >= P.lugW + 2 * m + ca && P.lugH >= 1.8) {
+    const off = -P.turn + P.lugW / 2 + m;   // just past the lug's trailing end when locked
+    return { kind: 'lug', fit, rr, rc: Rl + c + rr - (c + fit), z0: 0, z1: P.lugH - 0.2, angs: Array.from({ length: P.lugs }, (_, k) => k * 360 / P.lugs + off) };
+  }
   const rc = boreR + rr - (c + fit);                 // rib centre: its inner edge sits `fit` mm inside the collar's face
   const pitch = 360 / P.lugs;
   // Preferred: in the plain wall between one lug's groove and the next lug's entry channel, where nothing is cut, so the
@@ -760,11 +768,11 @@ function detentGeom() {
   const z1 = Math.min(P.collarH - 1.2, z0 + 5);   // below the bore top; at most 5 mm tall so the click stays light
   if (z1 - z0 < 2) return null;
   const angs = Array.from({ length: P.lugs }, (_, k) => k * pitch + off);
-  return { z0, z1, fit, rr, d, rc, Ro, angs, hump: (2.5 / Ro) / DEG };
+  return { kind: 'collar', z0, z1, fit, rr, d, rc, Ro, angs, hump: (2.5 / Ro) / DEG };
 }
 function collarDetentCuts(seg) {
   const g = detentGeom();
-  if (!g) return [];
+  if (!g || g.kind !== 'collar') return [];
   const out = [], rg = g.rr + 0.15, gc = g.Ro + rg - g.d;   // groove a little wider than the rib
   const band = [[g.Ro - g.d, g.z0 - 0.4], [g.Ro + 1, g.z0 - 0.4], [g.Ro + 1, g.z1 + 0.4], [g.Ro - g.d, g.z1 + 0.4]];
   const grooveA = (rg / g.Ro) / DEG;
@@ -1191,7 +1199,7 @@ function buildBase(seg) {
     if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, Rmax + 5, Rmax + 5, seg), 0, 0, -1), body))));
   }
   const dg = detentGeom();
-  if (dg) {   // vertical click ribs on the bore wall (rounded, so they print smooth over many layers)
+  if (dg) {   // vertical click ribs on the bore wall or the lug-groove wall (rounded, so they print smooth over many layers)
     const ribs = dg.angs.map(a => rotZ(tr(cyl(dg.z1 - dg.z0, dg.rr, dg.rr, 24), dg.rc, 0, f + dg.z0), a));
     result = keep(result.add(uni(ribs)));
   }
@@ -1949,7 +1957,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Clearance', 'clearance', 0.1, 0.8, 0.05, 'mm', twistOn);
   note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
   toggleRow(p, 'Click detent', 'detent', twistOn);
-  note(p, 'Small vertical ribs on the base’s inner wall click into matching grooves on the collar at the end of the turn. The collar has a relief track for the rest of the turn, so it only clicks at the end and turns freely otherwise.', twistOn);
+  segmented(p, 'Click style', 'detentStyle', { lug: 'In lug groove', collar: 'Collar grooves' }, () => twistOn() && P.detent);
+  note(p, 'In lug groove: a small rib in each of the base’s lug grooves. The lug rides over it for the last part of the turn and clicks in behind it, so the collar needs no cuts. It needs a turn a few degrees longer than the lug width; otherwise the collar style is used.', () => twistOn() && P.detent && P.detentStyle !== 'collar');
+  note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
   note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
   slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
 }
