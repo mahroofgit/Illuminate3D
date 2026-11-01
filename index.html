@@ -1893,15 +1893,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
   slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', holderOn);
   note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', holderOn);
-  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
-  slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
-  toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
-  note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
-  toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
-  slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
-  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
-  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
-  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
 
   h3(p, 'Ventilation', () => slotOn() || difSet());
   note(p, 'Keeps the puck cool for long use: air comes in through the side intakes, passes under the raised puck, rises past its edge through two notches at the slot ends, and leaves through the diffuser’s vent hole.', () => slotOn());
@@ -1944,6 +1935,17 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   toggleRow(p, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
   slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
   slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
+
+  h3(p, 'Cable & cover', tableBase);
+  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
+  slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
+  toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
+  note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
+  toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
+  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
+  slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
+  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
 
   h3(p, 'Twist lock', twistOn);
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
