@@ -289,7 +289,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffChamfer: 3, coverFit: 0.1,
@@ -353,8 +353,8 @@ function buildProfile() {
   return out;
 }
 
-function makeShapeF() {
-  const n = Math.round(P.sides), ro = P.round, asp = P.aspect;
+function makeShapeF(sides = P.sides, round = P.round, aspect = P.aspect) {
+  const n = Math.round(sides), ro = round, asp = aspect;
   const seg = TAU / n, half = Math.PI / n;
   const c = (1 - ro) / Math.cos(half);
   const xt = Math.atan((1 - ro) * Math.tan(half));
@@ -767,10 +767,10 @@ function intakeLayout(B) {
   }
   return (best?.angs || []).map(a => ({ a, g: intakeSlope(B, inGroove(a)) })).filter(h => h.g);
 }
-function intakeHoles(B) {
+function intakeHoles(B, Rmax = B.Rb) {
   if (!intakeOn()) return [];
   return intakeLayout(B).map(({ a, g }) => {
-    const r0 = g.Re + 3, z0 = g.ze - 3 * Math.tan(g.th), len = (r0 - g.rEnd) / Math.cos(g.th);
+    const r0 = Math.max(g.Re, Rmax) + 3, z0 = g.ze - (r0 - g.Re) * Math.tan(g.th), len = (r0 - g.rEnd) / Math.cos(g.th);
     const beta = -(90 - g.th / DEG);   // tilt +Z towards -X, rising at th
     return rotZ(tr(rot(cyl(len, g.hr, g.hr, 24), [0, beta, 0]), r0, 0, z0), a);
   });
@@ -842,9 +842,57 @@ function buildCover(seg) {
   return sub(uni(list), tr(box(sl, 2.4, sd + 1), -sl / 2, -1.2, -1));
 }
 
+// Shaped / patterned outside for the table base. The surface is r(angle, z) on the base's own taper; it's clamped so it
+// never comes within 2.4 mm of anything cut inside (twist-lock grooves above the floor, the light-source cavity and the
+// cover's lock grooves below it), so every connector cut afterwards is exactly what the plain base gets.
+// 'match' borrows the shade's cross-section and patterns, lined up with the shade as it sits locked (turned by the lock
+// angle) and with a linear twist carried on down; 'custom' has its own sides / rounding / twist.
+function baseOuter(B, seg) {
+  const H = B.H, f = B.f, fc = P.footChamfer, match = P.baseStyle === 'match';
+  const N = Math.max(128, seg * 2), dz = seg >= 128 ? 0.35 : 0.6;
+  const shapeF = match ? makeShapeF() : makeShapeF(P.baseSides, P.baseRound, 1);
+  let Rm = 0; if (P.basePat) { const prof = buildProfile(); for (const v of prof) Rm += v * P.width; Rm /= prof.length; }
+  const patt = P.basePat ? makePattern(Rm) : null, k = P.basePatScale;
+  const turn = match ? P.turn * DEG : 0, Hs = P.height;
+  const slope = P.twistStyle === 'linear' ? P.twist * DEG : P.twistStyle === 'wave' ? P.twist * DEG * Math.PI : 0;
+  const twAt = z => match ? slope * (z - f - P.collarH) / Hs : P.baseTwist * DEG * z / H;
+  const inner = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0), need = z => (z >= f - 0.5 ? B.gr1 : inner) + 2.4;
+  const zs = [];
+  const nz = Math.max(2, Math.ceil(H / dz));
+  for (let i = 0; i <= nz; i++) zs.push(H * i / nz);
+  if (fc > 0 && fc < H) { zs.push(fc); zs.sort((a, b) => a - b); }
+  const M = zs.length, NM = N * M, v = new Float32Array(NM * 3 + 6);
+  let Rmax = 0;
+  for (let i = 0; i < M; i++) {
+    const z = zs[i], r0 = B.Rb + (B.Rt - B.Rb) * z / H, tw = twAt(z);
+    const t = match ? (z - f - P.collarH) / Hs : z / Hs;
+    const fade = smoothstepE(P.baseFade, z) * smoothstepE(P.baseFade, H - z);
+    for (let j = 0; j < N; j++) {
+      const a0 = TAU * j / N, a = a0 + turn - tw;
+      let r = r0 * shapeF(a);
+      if (patt && fade > 0) r += k * fade * patt(a, t, t * Hs, r0);
+      r = Math.max(r, need(z));
+      if (z < fc) r -= fc - z;
+      const q = (i * N + j) * 3; v[q] = r * Math.cos(a0); v[q + 1] = r * Math.sin(a0); v[q + 2] = z;
+      if (r > Rmax) Rmax = r;
+    }
+  }
+  v.set([0, 0, 0, 0, 0, H], NM * 3);
+  const BC = NM, TC = NM + 1, tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
+  return { man: keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), Rmax };
+}
+
 function buildBase(seg) {
   const B = baseDims(), { H, f } = B;
-  const body = B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer], [B.Rt, H], [0, H]] : [[0, 0], [B.Rb, 0], [B.Rt, H], [0, H]], 360, seg);
+  const styled = !B.adapter && P.baseStyle !== 'plain' ? baseOuter(B, seg) : null;
+  const body = styled ? styled.man : B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer], [B.Rt, H], [0, H]] : [[0, 0], [B.Rb, 0], [B.Rt, H], [0, H]], 360, seg);
+  const Rmax = styled ? styled.Rmax : Math.max(B.Rb, B.Rt);   // outermost surface, for cuts that run out through the side
   const cut = [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
   const ca = (B.c / B.Ro) / DEG + 0.6;
@@ -890,7 +938,7 @@ function buildBase(seg) {
     // cable channel with an arched roof (prints without support)
     const hw = P.cableW / 2;
     const chan = (x, len, dz) => [tr(box(len, P.cableW, Math.max(0.02, P.cableW - hw)), x, -hw, dz - 0.01), tr(rot(cyl(len, hw, hw, 32), [0, 90, 0]), x, 0, dz + P.cableW - hw)];
-    ins.push(keep(W.Manifold.hull(chan(0, B.Rb + 2, 0))));
+    ins.push(keep(W.Manifold.hull(chan(0, Rmax + 2, 0))));
     if (coverActive(B)) {
       // the cable lies on top of the cover, so where the channel leaves the opening it starts a cover-thickness higher
       // and ramps back down at 45° (printable roof) to the normal channel
@@ -898,7 +946,7 @@ function buildBase(seg) {
       ins.push(keep(W.Manifold.hull([...chan(X - 3, 3.5, P.coverT), ...chan(X + 0.5 + P.coverT, 0.01, 0)])));
     }
   }
-  ins.push(...intakeHoles(B));
+  ins.push(...intakeHoles(B, Rmax));
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
   result = sub(result, uni(ins));
   if (B.insert === 'slot' && P.underPuck === 'ribs') {
@@ -925,7 +973,7 @@ function buildBase(seg) {
         beads.push(keep(W.Manifold.hull([tr(rot(cyl(L, r, r, 24), [0, 90, 0]), x, y0, r * Math.SQRT2), tr(box(L, 0.01, 0.01), x, y0 - 0.005, 0)])));
       }
     }
-    if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, B.Rb + 5, B.Rb + 5, seg), 0, 0, -1), body))));
+    if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, Rmax + 5, Rmax + 5, seg), 0, 0, -1), body))));
   }
   if (P.detent) {
     const bumps = [], len = g1 - (B.Ro + 0.3);
@@ -1649,6 +1697,15 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
   slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
   note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
+  const styledOn = () => tableBase() && P.baseStyle !== 'plain';
+  segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
+  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
+  slider(p, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
+  slider(p, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
+  slider(p, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
+  toggleRow(p, 'Shade patterns on base', 'basePat', styledOn);
+  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && P.basePat);
+  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && P.basePat);
 
   h3(p, 'Twist lock', twistOn);
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
