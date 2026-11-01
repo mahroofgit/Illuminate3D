@@ -507,7 +507,8 @@ function buildShade(N, layer) {
     transH = Math.max(2, md / Math.tan(lim));
     zStart = P.collarH;
     let mo = 1e9, mi = 1e9; for (let j = 0; j < N; j++) { mo = Math.min(mo, o0[j]); mi = Math.min(mi, i0[j]); }
-    if (P.flareShape && mo >= Rco && mi >= Rci) flare = shapedFlare(o0, i0, Rco, Rci, N, lim, transH, H, pend, twAt);
+    // with a skirt the flare is hidden inside it, so it stays the plain, shortest straight cone
+    if (P.flareShape && !skirtOn() && mo >= Rco && mi >= Rci) flare = shapedFlare(o0, i0, Rco, Rci, N, lim, transH, H, pend, twAt);
     if (flare) transH = flare.transH;
   }
   const zb = zStart + transH;
@@ -1741,7 +1742,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Corner rounding', 'round', 0, 1, 0.01, '', () => P.sides >= 3);
   slider(p, 'Twist', 'twist', -360, 360, 1, '°');
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
-  toggleRow(p, 'Shape the flare', 'flareShape', () => P.mount === 'twist');
+  toggleRow(p, 'Shape the flare', 'flareShape', () => P.mount === 'twist' && !skirtOn());
   note(p, 'The flare is where the shade narrows down to the twist-lock collar. Off: a straight blend, so sides and lobes shrink evenly into a plain cone. On: the cross-section keeps its shape (and keeps twisting) through most of the flare and only rounds off near the collar. The flare gets taller if it must to stay within your overhang limit.', () => P.mount === 'twist');
 }
 
