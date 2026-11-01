@@ -283,7 +283,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffT: 0.8, diffGap: 6, coverFit: 0.1,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'cone', diffT: 0.8, diffGap: 6, diffVent: 0, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -541,7 +541,7 @@ function puckTopZ(B) {   // top of the puck, in shade coordinates (collar bottom
 function diffuserGeom(S) {
   const B = baseDims(), N = S.N, NM = N * S.M, Rci = P.collarD / 2;
   const phi = (Math.max(40, 90 - P.overhang) + 5) * DEG, t = Math.tan(phi), tv = P.diffT / Math.cos(phi);
-  const zLow = puckTopZ(B) + P.diffGap;
+  const zLow = Math.max(puckTopZ(B) + P.diffGap, puckLift(B) + 0.5);   // never down on the riser or base floor
   // widest inner radius right at the rim height: the collar bore below the flare, else the two shade rows around zLow
   let rAtt = Rci;
   if (zLow > S.rowZ[0]) {
@@ -549,7 +549,8 @@ function diffuserGeom(S) {
     let i = 0; while (i < S.M - 2 && S.rowZ[i + 1] < zLow) i++;
     for (const ii of [i, i + 1]) for (let j = 0; j < N; j++) { const k = (NM + ii * N + j) * 3; rAtt = Math.max(rAtt, Math.hypot(S.pos[k], S.pos[k + 1])); }
   }
-  return { zLow, t, tv, rAtt, zTop: zLow + tv + rAtt * t };
+  const flat = P.diffStyle === 'flat';
+  return { zLow, t, tv, rAtt, flat, zTop: flat ? zLow + P.diffT : zLow + tv + rAtt * t };
 }
 function diffuserSolid(S, seg) {
   const g = diffuserGeom(S), N = S.N, M = S.M, NM = N * M;
@@ -566,8 +567,10 @@ function diffuserSolid(S, seg) {
   for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
   const inside = uni([keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), cyl(P.collarH + 0.5, P.collarD / 2 + P.collarWall, P.collarD / 2 + P.collarWall, seg)]);
   const Rb = g.rAtt + 2 * Math.max(P.wall, P.collarWall) + 2;
-  const cone = revolve([[0, g.zTop - g.tv], [Rb, g.zTop - g.tv - Rb * g.t], [Rb, g.zTop - Rb * g.t], [0, g.zTop]], 360, seg);
-  return keep(cone.intersect(inside));
+  let sheet = g.flat ? tr(cyl(P.diffT, Rb, Rb, seg), 0, 0, g.zLow)
+    : revolve([[0, g.zTop - g.tv], [Rb, g.zTop - g.tv - Rb * g.t], [Rb, g.zTop - Rb * g.t], [0, g.zTop]], 360, seg);
+  if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // vent hole
+  return keep(sheet.intersect(inside));
 }
 function shadeConnector(S, seg, overlap = 0.4) {
   if (P.mount === 'ring') {
@@ -1042,7 +1045,8 @@ function update() {
     }
     if (diffuserOn()) {
       const g = diffuserGeom(S), ok = g.zTop <= S.zEnd - 2;
-      checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(P.diffGap)} mm above the puck` : `The diffuser cone would poke out of the top — lower the gap or use a taller shade`]);
+      checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(g.zLow - puckTopZ(B))} mm above the puck${P.diffVent > 0 ? `, Ø${fmt(P.diffVent)} vent` : ''}` : `The diffuser would poke out of the top — lower the gap or use a taller shade`]);
+      if (ok && g.flat) checks.push([false, `Flat diffuser spans Ø${(2 * g.rAtt).toFixed(0)} mm — turn on supports under it in your slicer`]);
     }
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
@@ -1446,10 +1450,13 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
   slider(p, 'Lift puck', 'puckLift', 0, 45, 0.5, 'mm', () => puckOn() || slotOn());
   note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
-  toggleRow(p, 'Diffuser', 'diffuser', () => tableBase() && (puckOn() || slotOn()));
-  note(p, 'A thin cone printed inside the shade just above the puck that softens the bright LED dots. It slopes at your overhang limit, so it prints with the shade without supports. Thinner lets more light through.', () => tableBase() && (puckOn() || slotOn()));
-  slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', () => tableBase() && (puckOn() || slotOn()) && P.diffuser);
-  slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', () => tableBase() && (puckOn() || slotOn()) && P.diffuser);
+  const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
+  toggleRow(p, 'Diffuser', 'diffuser', difOn);
+  note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under it. Thinner lets more light through; a vent hole lets heat out.', difOn);
+  segmented(p, 'Diffuser shape', 'diffStyle', { cone: 'Cone (no supports)', flat: 'Flat (supports)' }, difSet);
+  slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', difSet);
+  slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', difSet);
+  slider(p, 'Vent hole Ø', 'diffVent', 0, 30, 0.5, 'mm', difSet);
   select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
   slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
