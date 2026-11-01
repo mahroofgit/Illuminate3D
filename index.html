@@ -72,6 +72,8 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .ctl { display: grid; grid-template-columns: 112px 1fr 62px; align-items: center; gap: 8px; margin: 6px 0; }
 .ctl.wide { grid-template-columns: 112px 1fr; }
 .ctl label { color: var(--muted); font-size: 12px; }
+.ctl .lim { display: block; font-size: 10px; color: var(--accent); }
+.ctl .limhint { grid-column: 1 / -1; margin-top: -3px; font-size: 11px; color: var(--accent); line-height: 1.35; }
 .ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=number], select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
@@ -519,7 +521,7 @@ function shadeConnector(S, seg) {
 
 function baseDims() {
   const Ri = P.collarD / 2, Ro = Ri + P.collarWall, c = P.clearance;
-  const boreR = Ro + c, gr1 = Ro + P.lugDepth + c, ringMin = gr1 + 2.4, boreDepth = P.collarH - 0.5;
+  const boreR = Ro + c, gr1 = Ro + P.lugDepth + c, ringMin = gr1 + 3, boreDepth = P.collarH - 0.5;
   const adapter = P.baseType === 'adapter' || P.orient === 'pendant';
   const insert = adapter ? 'socket' : P.insert;
   let H, f, Rt, Rb, minH = 0, minParts = '';
@@ -538,6 +540,54 @@ function baseDims() {
     Rt = Math.max(P.baseTopD / 2, ringMin); Rb = Math.max(P.baseD / 2, 20);
   }
   return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
+}
+
+// ---------------------------------------------------------------- dependent limits
+// Each entry returns [min, max, reason]. They are applied in this order before every rebuild (later ones depend on
+// earlier ones), so the design can never reach a broken state; the sliders show the live range and the reason.
+const lockSlack = () => (P.clearance / (P.collarD / 2 + P.collarWall)) / DEG + 0.6;
+const baseInsert = () => (P.baseType === 'adapter' || P.orient === 'pendant') ? 'socket' : P.insert;
+function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
+  if (B.adapter) return 0;
+  if (B.insert === 'puck') return P.puckD / 2 + B.c + 7;
+  if (B.insert === 'slot') return P.slotStyle === 'funnel' ? P.slotD / 2 + B.c + 4 : Math.hypot(P.slotD / 2 + B.c, P.slotW / 2);
+  return P.socketD / 2;
+}
+const fmt = v => +(+v).toFixed(1);
+const LIMITS = {
+  seatDepth: () => [P.slotH, Math.max(8, P.slotH + 4), `the seat must be at least as deep as the puck is thick (${fmt(P.slotH)} mm) so it sits flush.`],
+  slotW: () => [P.slotH + 2 * P.clearance, 20, `the slot must be wider than the puck thickness plus clearance so the puck fits through on its edge.`],
+  collarH: () => [P.lugH + P.lugDepth + 3, 30, `the collar needs room for the ${fmt(P.lugH)} mm lug and the 45° chamfer above it.`],
+  lugW: () => [8, 360 / P.lugs - 10 - 2 * lockSlack() - 4, `with ${P.lugs} lugs, each lug plus its turn has to fit in ${fmt(360 / P.lugs)}°.`],
+  turn: () => [10, 360 / P.lugs - P.lugW - 2 * lockSlack() - 4, `lug width plus turn must leave a wall between neighbouring grooves.`],
+  collarD: () => {
+    const ins = baseInsert();
+    const lo = ins === 'puck' ? P.puckD + 4 : ins === 'slot' ? P.slotD + 2 * P.clearance + 8 : P.holeD + 12;
+    return [Math.max(30, lo), 160, ins === 'socket' ? `the collar has to clear the Ø${fmt(P.holeD)} socket.` : `the puck (Ø${fmt(ins === 'puck' ? P.puckD : P.slotD)}) has to fit inside the collar.`];
+  },
+  baseTopD: () => { const B = baseDims(); return [2 * (B.gr1 + 3), 240, `the top keeps 3 mm of wall around the twist-lock grooves. Lower the collar Ø to make the base narrower.`]; },
+  baseH: () => { const B = baseDims(); return [B.minH, 150, `the base has to hold ${B.minParts} mm.`]; },
+  baseD: () => {
+    const B = baseDims(), lean = B.Rt - B.H * Math.tan(P.overhang * DEG), wall = baseFeatureR(B) + 2.4;
+    // the side is a straight taper, so it must also still be ≥ groove radius + 3 mm at the twist-lock floor height
+    const t = B.f / B.H, need = B.gr1 + 3, groove = t < 1 ? (need - B.Rt * t) / (1 - t) : need;
+    const lo = Math.max(lean, wall, groove, 20);
+    const why = lo === lean ? `a narrower bottom would make the side lean out past your ${P.overhang}° overhang limit.`
+      : lo === groove ? `the tapered side has to stay 3 mm thick around the twist-lock grooves near the floor.`
+      : `the bottom keeps a wall around the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} inside.`;
+    return [2 * lo, 240, why];
+  },
+};
+function applyConstraints() {
+  let changed = false;
+  for (const k in LIMITS) {
+    const [lo, hi0] = LIMITS[k](), hi = Math.max(lo, hi0), v = getK(k);
+    let nv = v;
+    if (v < lo - 1e-9) nv = Math.ceil(lo * 100) / 100;
+    else if (v > hi + 1e-9) nv = Math.max(Math.floor(hi * 100) / 100, Math.ceil(lo * 100) / 100);
+    if (nv !== v) { setK(k, nv); changed = true; }
+  }
+  return changed;
 }
 
 function slotDims(B) {
@@ -680,6 +730,8 @@ function analyse(S, geo) {
 }
 
 function update() {
+  applyConstraints();
+  refreshAll();
   const S = buildShade(Math.round(P.previewRes), P.previewLayer);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(S.pos, 3));
@@ -758,8 +810,6 @@ function update() {
       const okH = P.holeD < P.collarD - 4;
       checks.push([okH, okH ? `Socket Ø${P.holeD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too small for the Ø${P.holeD} socket`]);
     }
-    if (B.minHClamped) checks.push([false, `Base raised to ${B.H.toFixed(1)} mm, the minimum for this setup: ${B.minParts}`]);
-    if (B.ringClamped) checks.push([false, `Base top widened to Ø${(B.Rt * 2).toFixed(0)} mm to hold the twist lock`]);
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
   if (lightZ !== null && (P.mount === 'ring' || (twist && B.insert === 'socket'))) {
@@ -912,9 +962,20 @@ function h3(parent, text, when) { const e = document.createElement('h3'); e.text
 function note(parent, text, when) { const e = document.createElement('div'); e.className = 'note'; e.innerHTML = text; parent.append(e); return reg(e, when); }
 function slider(parent, label, key, min, max, step, unit = '', when) {
   const row = document.createElement('div'); row.className = 'ctl';
-  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
-  const [rg, nb] = row.querySelectorAll('input');
-  const sync = () => { const v = getK(key); rg.value = v; nb.value = +(+v).toFixed(2); };
+  row.innerHTML = `<label title="${unit}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}"><div class="limhint" hidden></div>`;
+  const [rg, nb] = row.querySelectorAll('input'), lab = row.querySelector('label'), hint = row.querySelector('.limhint');
+  const sync = () => {
+    const v = getK(key), lim = LIMITS[key]?.();
+    if (lim) {
+      const lo = Math.max(min, lim[0]), hi = Math.max(lo, lim[1]);
+      rg.min = nb.min = lo; rg.max = nb.max = hi;
+      const atMin = lim[0] > min && v <= lo + 0.01, atMax = lim[1] < max && v >= hi - 0.01;
+      lab.innerHTML = label + (lim[0] > min ? `<small class="lim">min ${fmt(lo)}</small>` : '');
+      hint.hidden = !(atMin || atMax);
+      hint.textContent = (atMin ? 'At its minimum: ' : 'At its maximum: ') + lim[2];
+    }
+    rg.value = v; nb.value = +(+v).toFixed(2);
+  };
   rg.addEventListener('input', () => { nb.value = rg.value; changed(key, +rg.value); });
   nb.addEventListener('change', () => { const v = +nb.value; if (!Number.isFinite(v)) return sync(); rg.value = v; changed(key, v); });
   parent.append(row); sync();
