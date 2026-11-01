@@ -1347,7 +1347,7 @@ function buildBase(seg) {
 
 // ---------------------------------------------------------------- three.js scene
 const view = document.getElementById('view');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 view.prepend(renderer.domElement);
@@ -1373,9 +1373,19 @@ assembly.add(bulbLight);
 const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
 const connMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, side: THREE.FrontSide, emissive: 0xffa040, emissiveIntensity: 0 });
 const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, side: THREE.FrontSide });
-// Section-view caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
-// polygonOffset pulls the section caps forward so they win over faces that touch them (collar on the shade, collar on the base floor)
-const capOpts = { side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+// Section-view caps (stencil method): every part is a closed solid, so along any view ray behind the cut plane its back
+// faces minus its front faces is non-zero exactly where the plane lies inside the part. Each part counts that into the
+// stencil buffer (no colour, no depth), then a quad on the cut plane is drawn wherever the count is non-zero and resets it.
+// The cap is real geometry on the plane, so it never shows through at edges or holes the way pulled-forward back faces did.
+const stencilOpts = { colorWrite: false, depthWrite: false, depthTest: false, stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc };
+const stBackMat = new THREE.MeshBasicMaterial({ ...stencilOpts, side: THREE.BackSide, stencilFail: THREE.IncrementWrapStencilOp, stencilZFail: THREE.IncrementWrapStencilOp, stencilZPass: THREE.IncrementWrapStencilOp });
+const stFrontMat = new THREE.MeshBasicMaterial({ ...stencilOpts, side: THREE.FrontSide, stencilFail: THREE.DecrementWrapStencilOp, stencilZFail: THREE.DecrementWrapStencilOp, stencilZPass: THREE.DecrementWrapStencilOp });
+const capOpts = { side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+  stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp };
+const capQuadGeo = new THREE.PlaneGeometry(4000, 4000);
+capQuadGeo.boundingBox = new THREE.Box3();   // empty, so framing and the floor ignore the huge cap quads
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0), capWorld = new THREE.Matrix4();
+let capOrder = 1;
 // Caps are drawn like a CAD section: a bright fill per part with diagonal hatching, laid out in screen pixels so the
 // lines keep the same spacing at any zoom. Neighbouring parts hatch in opposite directions.
 function hatchMat(fill, line, dir) {
@@ -1407,12 +1417,23 @@ resize();
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 
 // caps are always built and only shown/hidden, so the cutaway never depends on a rebuild having run
-function addCap(parent, geo, cap) { const m = new THREE.Mesh(geo, cap); m.userData.cap = true; m.visible = view3.cut; parent.add(m); }
+function addCap(parent, geo, cap) {
+  // each part gets its own render-order slot: count into the stencil, then draw its cap and clear the count
+  const o = capOrder; capOrder = capOrder > 1e6 ? 1 : capOrder + 1;
+  const back = new THREE.Mesh(geo, stBackMat), front = new THREE.Mesh(geo, stFrontMat), quad = new THREE.Mesh(capQuadGeo, cap);
+  back.renderOrder = front.renderOrder = o; quad.renderOrder = o + 0.5;
+  quad.frustumCulled = false;
+  quad.onBeforeRender = () => quad.matrixWorld.copy(capWorld);   // the quad lies on the world-space cut plane wherever its part is
+  for (const m of [back, front, quad]) { m.userData.cap = true; m.visible = view3.cut; parent.add(m); }
+}
 function addSolid(g, geo, mat, cap) { g.add(new THREE.Mesh(geo, mat)); addCap(g, geo, cap); }
 function applyCut() {
   // the section plane is vertical through the lamp axis; the angle swings it around the axis (0° = facing the front view)
   const a = view3.cutAngle * DEG;
-  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a)), 0)] : [];
+  cutPlane.normal.set(-Math.sin(a), 0, -Math.cos(a));
+  renderer.clippingPlanes = view3.cut ? [cutPlane] : [];
+  // cap quads: the plane's normal is their +Z, nudged a hair onto the kept side so the clipping never eats them
+  capWorld.lookAt(new THREE.Vector3(), cutPlane.normal.clone().negate(), new THREE.Vector3(0, 1, 0)).setPosition(cutPlane.normal.clone().multiplyScalar(0.02));
   document.getElementById('secbar').hidden = !view3.cut;
   assembly.traverse(o => { if (o.userData.cap) o.visible = view3.cut; });
 }
