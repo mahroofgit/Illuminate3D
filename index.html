@@ -81,6 +81,7 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .ctl .lim .warn { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: 4px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800; vertical-align: 1px; }
 #tipbox { position: fixed; z-index: 30; max-width: 300px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 12px; line-height: 1.4; pointer-events: none; display: none; }
 .ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
+.partbar { margin: 4px 0 6px; } .partbar button { padding: 7px 2px; font-size: 13px; font-weight: 600; }
 .panel h3 { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0; }
 .panel h3::before { content: ''; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; margin-right: 7px; transition: transform .15s; flex: none; }
 .panel h3.collapsed::before { transform: rotate(-90deg); }
@@ -1942,11 +1943,27 @@ function sideEffects(key) {
 
 const twistOn = () => P.mount === 'twist';
 const ringOn = () => P.mount === 'ring';
+const tableBase = () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant');
 const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType === 'adapter' || P.orient === 'pendant');
 
 // Shape tab
 {
-  const p = document.getElementById('p-shape');
+  const tab = document.getElementById('p-shape');
+  // Shade / Base switch: the base only has a shape of its own when the lamp twists onto a table base
+  let part = 'shade';
+  try { part = localStorage.getItem('illum.shapePart') || 'shade'; } catch (e) { /* storage unavailable */ }
+  const bar = document.createElement('div'); bar.className = 'seg partbar';
+  bar.innerHTML = '<button data-v="shade">Shade</button><button data-v="base">Base</button>';
+  const syncBar = () => bar.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === part));
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    part = b.dataset.v; try { localStorage.setItem('illum.shapePart', part); } catch (err) { /* storage unavailable */ }
+    refreshAll(); if (part === 'shade') drawProfile();
+  });
+  tab.append(reg(bar, tableBase, syncBar));
+  const p = document.createElement('div'), pb = document.createElement('div');
+  p.className = pb.className = 'sub'; p.id = 'p-shape-shade'; pb.id = 'p-shape-base';
+  tab.append(reg(p, () => part === 'shade' || !tableBase()), reg(pb, () => part === 'base' && tableBase()));
   h3(p, 'Start from');
   const grid = document.createElement('div'); grid.className = 'presets';
   for (const name of Object.keys(PROFILES)) {
@@ -1975,6 +1992,34 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
   toggleRow(p, 'Shape the flare', 'flareShape', () => P.mount === 'twist' && !skirtOn());
   note(p, 'The flare is where the shade narrows down to the twist-lock collar. Off: a straight blend, so sides and lobes shrink evenly into a plain cone. On: the cross-section keeps its shape (and keeps twisting) through most of the flare and only rounds off near the collar. The flare gets taller if it must to stay within your overhang limit.', () => P.mount === 'twist');
+
+  h3(p, 'Shade skirt', tableBase);
+  toggleRow(p, 'Add skirt', 'skirt', tableBase);
+  note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
+  slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt);
+  note(p, 'A flat plate runs from the collar top straight out to the skirt, and the skirt itself is the shade’s wall down to it. The plate prints as a bridge from the collar to the skirt; turn on supports there if your printer bridges poorly.', () => tableBase() && P.skirt);
+  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', () => tableBase() && P.skirt);
+  note(p, 'A 45° fillet under the plate, in the corner where it meets the skirt’s wall: it shortens the plate’s bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the skirt hugs the neck. 0 turns it off.', () => tableBase() && P.skirt);
+  slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
+  note(p, 'Webs under the plate, from the bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the skirt for twisting.', () => tableBase() && P.skirt);
+  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
+
+  h3(pb, 'Base', tableBase);
+  slider(pb, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
+  slider(pb, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
+  slider(pb, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
+  slider(pb, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
+  note(pb, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
+  const styledOn = () => tableBase() && P.baseStyle !== 'plain';
+  segmented(pb, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
+  note(pb, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
+  slider(pb, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
+  slider(pb, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
+  slider(pb, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
+  const anyPat = () => Object.values(P.pat).some(q => q.on);
+  toggleRow(pb, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
+  slider(pb, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
+  slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
 }
 
 // Pattern tab
@@ -2010,7 +2055,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   segmented(p, 'Twist onto', 'baseType', { table: 'Table base', adapter: 'Socket adapter' }, () => twistOn() && P.orient !== 'pendant');
   note(p, 'Pendants use the socket adapter: it clamps to the holder and the shade twists onto it from below.', () => twistOn() && P.orient === 'pendant');
 
-  const tableBase = () => twistOn() && !(P.baseType === 'adapter' || P.orient === 'pendant');
   const holderOn = () => ringOn() || socketInsert();
   const puckOn = () => twistOn() && !socketInsert() && P.insert === 'puck';
   const slotOn = () => twistOn() && !socketInsert() && P.insert === 'slot';
@@ -2062,34 +2106,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
   note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
   slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
-
-  h3(p, 'Base', tableBase);
-  slider(p, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
-  slider(p, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
-  slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
-  slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
-  note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
-  const styledOn = () => tableBase() && P.baseStyle !== 'plain';
-  segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
-  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
-  slider(p, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
-  slider(p, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
-  slider(p, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
-  const anyPat = () => Object.values(P.pat).some(q => q.on);
-  toggleRow(p, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
-  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
-  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
-
-  h3(p, 'Shade skirt', tableBase);
-  toggleRow(p, 'Add skirt', 'skirt', tableBase);
-  note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
-  slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt);
-  note(p, 'A flat plate runs from the collar top straight out to the skirt, and the skirt itself is the shade’s wall down to it. The plate prints as a bridge from the collar to the skirt; turn on supports there if your printer bridges poorly.', () => tableBase() && P.skirt);
-  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', () => tableBase() && P.skirt);
-  note(p, 'A 45° fillet under the plate, in the corner where it meets the skirt’s wall: it shortens the plate’s bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the skirt hugs the neck. 0 turns it off.', () => tableBase() && P.skirt);
-  slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
-  note(p, 'Webs under the plate, from the bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the skirt for twisting.', () => tableBase() && P.skirt);
-  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
 
   h3(p, 'Cable & cover', tableBase);
   slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
@@ -2188,7 +2204,7 @@ const FILAMENTS = [['White', '#f5f5f2'], ['Natural', '#f2ede4'], ['Beige', '#d9c
 {
   let folded = {};
   try { folded = JSON.parse(localStorage.getItem('illum.folded') || '{}'); } catch (e) { /* storage unavailable */ }
-  for (const panel of document.querySelectorAll('.panel')) for (const h of [...panel.querySelectorAll(':scope > h3')]) {
+  for (const panel of document.querySelectorAll('.panel, .sub')) for (const h of [...panel.querySelectorAll(':scope > h3')]) {
     const body = document.createElement('div'); body.className = 'grpbody';
     while (h.nextElementSibling && !h.nextElementSibling.matches('h3')) body.append(h.nextElementSibling);
     h.after(body);
