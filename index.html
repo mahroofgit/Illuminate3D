@@ -292,7 +292,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffChamfer: 3, coverFit: 0.1,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -609,6 +609,15 @@ function diffuserGeom(S) {
   const flat = P.diffStyle === 'flat';
   return { zLow, t, tv, rAtt, flat, zTop: flat ? zLow + P.diffT : zLow + tv + rAtt * t };
 }
+function innerRadiusAt(S, z, a) {   // the shade's inner wall radius at height z and angle a (rows and columns interpolated)
+  const N = S.N, NM = N * S.M;
+  let i = 0; while (i < S.M - 2 && S.rowZ[i + 1] < z) i++;
+  const f = Math.min(1, Math.max(0, (z - S.rowZ[i]) / Math.max(1e-6, S.rowZ[i + 1] - S.rowZ[i])));
+  const u = ((a / TAU * N) % N + N) % N, j = Math.floor(u), t = u - j;
+  const r = (ii, jj) => { const k = (NM + ii * N + (jj % N)) * 3; return Math.hypot(S.pos[k], S.pos[k + 1]); };
+  const row = ii => r(ii, j) * (1 - t) + r(ii, j + 1) * t;
+  return row(i) * (1 - f) + row(i + 1) * f;
+}
 function diffuserSolid(S, seg) {
   const g = diffuserGeom(S), N = S.N, M = S.M, NM = N * M;
   if (g.zTop > S.zEnd - 2) return null;
@@ -634,7 +643,15 @@ function diffuserSolid(S, seg) {
     else ring = null;
     if (ring) sheet = uni([sheet, ring]);
   }
-  if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // vent hole
+  if (P.diffVent > 0 && P.diffVentStyle === 'edge') {
+    // square cuts against the wall: through the diffuser and its rim chamfer only (the shade wall is added afterwards)
+    const w = P.diffVent, n = Math.round(P.diffVentN), z0 = g.zLow - Math.max(P.diffChamfer, 0) - 1, cuts = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k + 0.5) * 360 / n, ri = innerRadiusAt(S, g.zLow, a * DEG);
+      cuts.push(rotZ(tr(box(w + 6, w, g.zTop - z0 + 1), ri - w, -w / 2, z0), a));
+    }
+    sheet = sub(sheet, uni(cuts));
+  } else if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // centre vent hole
   return keep(sheet.intersect(inside));
 }
 // Skirt: an outer shell on the shade that carries its outline down past the flare to meet the base, so shade and base
@@ -1352,7 +1369,7 @@ function update() {
     }
     if (diffuserOn()) {
       const g = diffuserGeom(S), ok = g.zTop <= S.zEnd - 2;
-      checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(g.zLow - puckTopZ(B))} mm above the puck${P.diffVent > 0 ? `, Ø${fmt(P.diffVent)} vent` : ''}` : `The diffuser would poke out of the top — lower the gap or use a taller shade`]);
+      checks.push([ok, ok ? `Diffuser ${fmt(P.diffT)} mm thick, ${fmt(g.zLow - puckTopZ(B))} mm above the puck${P.diffVent > 0 ? (P.diffVentStyle === 'edge' ? `, ${Math.round(P.diffVentN)} edge vents ${fmt(P.diffVent)} mm` : `, Ø${fmt(P.diffVent)} vent`) : ''}` : `The diffuser would poke out of the top — lower the gap or use a taller shade`]);
       if (ok && g.flat) checks.push([false, `Flat diffuser spans Ø${(2 * Math.max(0, g.rAtt - P.diffChamfer)).toFixed(0)} mm — turn on supports under it in your slicer`]);
     }
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
@@ -1645,7 +1662,7 @@ function toggleRow(parent, label, key, when) {
 // Light-source presets: a named set of the puck, slot, diffuser, cable and cover settings. Built-ins ship with the
 // app; custom ones are saved in this browser. Choosing one applies just those settings, the shade is untouched.
 const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
-  'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
+  'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'diffVentStyle', 'diffVentN', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
 const BUILTIN_PRESETS = {
   '3mm LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32.5, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.2, fingerRoom: 2, underPuck: 'tape', underGap: 2, intake: true, intakeN: 4, intakeD: 6.5, puckLift: 7.5,
     diffuser: true, diffStyle: 'flat', diffT: 0.4, diffGap: 5, diffChamfer: 5, diffVent: 8, cableD: 3.2, cableW: 5.4, cableGrip: true, cover: true, coverT: 2.6 },
@@ -1840,7 +1857,11 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Holes drilled up and inward from low on the base’s side into the space under the puck, so air gets in even with the base flat on the table and the bottom cover on. They slope upward, so you can’t see through them from the side. Pair them with a gap under the puck and a diffuser vent hole so warm air can flow out the top.', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
   slider(p, 'Intake holes', 'intakeN', 2, 6, 1, '', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
   slider(p, 'Intake hole Ø', 'intakeD', 2, 8, 0.5, 'mm', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
-  slider(p, 'Diffuser vent Ø', 'diffVent', 0, 30, 0.5, 'mm', difSet);
+  segmented(p, 'Diffuser vent', 'diffVentStyle', { center: 'Center hole', edge: 'Edge cuts' }, difSet);
+  note(p, '<b>Center hole</b>: one round hole in the middle, right over the puck. <b>Edge cuts</b>: square cuts through the diffuser and its rim chamfer, against the shade wall, so warm air rises along the wall and no bright spot shows through the middle. The shade wall itself is never cut.', difSet);
+  slider(p, 'Diffuser vent Ø', 'diffVent', 0, 30, 0.5, 'mm', () => difSet() && P.diffVentStyle !== 'edge');
+  slider(p, 'Edge cut size', 'diffVent', 0, 15, 0.5, 'mm', () => difSet() && P.diffVentStyle === 'edge');
+  slider(p, 'Edge cuts', 'diffVentN', 2, 8, 1, '', () => difSet() && P.diffVentStyle === 'edge');
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
