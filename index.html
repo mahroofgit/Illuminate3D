@@ -15,17 +15,17 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root {
-  --bg: #f4f3f0; --panel: #ffffff; --panel-2: #f7f6f3; --line: #e3e1dc; --text: #1d1d1f; --muted: #6e6e73;
+  --bg: #f4f3f0; --panel: #ffffff; --panel-2: #f7f6f3; --line: #e3e1dc; --track: #e3e1dc; --text: #1d1d1f; --muted: #6e6e73;
   --accent: #0e8fa0; --accent-soft: rgba(14,143,160,.13); --ok: #2f9e55; --warn: #d7462e; --view: radial-gradient(ellipse at 50% 35%, #ffffff 0%, #e9e7e2 70%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --text: #f2f2f4; --muted: #9a9aa0;
+    --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --track: #48484c; --text: #f2f2f4; --muted: #9a9aa0;
     --accent: #2cb5c8; --accent-soft: rgba(44,181,200,.16); --ok: #4cc27a; --warn: #ff6b55; --view: radial-gradient(ellipse at 50% 35%, #2c2c2f 0%, #141415 75%);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --text: #f2f2f4; --muted: #9a9aa0;
+  --bg: #161617; --panel: #1f1f21; --panel-2: #262628; --line: #333336; --track: #48484c; --text: #f2f2f4; --muted: #9a9aa0;
   --accent: #2cb5c8; --accent-soft: rgba(44,181,200,.16); --ok: #4cc27a; --warn: #ff6b55; --view: radial-gradient(ellipse at 50% 35%, #2c2c2f 0%, #141415 75%);
 }
 * { box-sizing: border-box; }
@@ -91,7 +91,29 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .presetrow select { flex: 1; min-width: 0; }
 .presetrow button { flex: none; padding: 4px 6px; display: grid; place-items: center; }
 .presetrow button:disabled { opacity: .35; cursor: default; }
-input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; --p: 50%; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--p), var(--track) var(--p)); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--track); }
+input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); box-shadow: 0 1px 4px rgba(0,0,0,.35); transition: transform .1s; }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+input[type=range]:active::-webkit-slider-thumb { transform: scale(1.2); }
+input[type=range]:focus-visible { outline: none; }
+input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft); }
+.ctl.sl { grid-template-columns: 1fr auto auto; grid-template-areas: "lab num rst" "rg rg rg"; gap: 5px 6px; margin: 8px 0 12px; }
+.ctl.sl label { grid-area: lab; } .ctl.sl .numbox { grid-area: num; } .ctl.sl .rst { grid-area: rst; } .ctl.sl input[type=range] { grid-area: rg; }
+.numbox { display: flex; align-items: center; width: 98px; height: 28px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding-left: 6px; overflow: hidden; }
+.numbox:focus-within { border-color: var(--accent); }
+.numbox input[type=number] { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0 4px 0 0; text-align: right; font-variant-numeric: tabular-nums; -moz-appearance: textfield; outline: none; }
+.numbox input::-webkit-inner-spin-button, .numbox input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.numbox .u { font-size: 11px; font-weight: 600; color: var(--muted); padding-right: 5px; }
+.numbox .stp { display: flex; flex-direction: column; align-self: stretch; border-left: 1px solid var(--line); }
+.numbox .stp button { flex: 1; width: 18px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.numbox .stp button:first-child { border-bottom: 1px solid var(--line); }
+.numbox .stp button:hover { color: var(--accent); background: var(--accent-soft); }
+.rst { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.rst:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.rst:disabled { opacity: .35; cursor: default; }
 input[type=number], select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
 input[type=number] { text-align: right; padding-right: 4px; }
 .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
@@ -1810,10 +1832,21 @@ function note(parent, text, when) {
   const e = document.createElement('span'); e.className = 'info'; e.textContent = 'i'; e.dataset.tip = text; e.dataset.html = '1';
   host.append(e); return reg(e, when);
 }
+const getDef = k => k.split('.').reduce((o, p) => o?.[p], DEFAULT);
+// the part of a range track left of the thumb is drawn in the accent colour
+const fillRange = r => r.style.setProperty('--p', ((r.value - r.min) / ((r.max - r.min) || 1) * 100) + '%');
+document.addEventListener('input', e => { if (e.target.type === 'range') fillRange(e.target); });
+const CHEV = d => `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+// Slider row: label, number box (value, unit, up/down steppers) and a reset-to-default button, with the track below.
 function slider(parent, label, key, min, max, step, unit = '', when) {
-  const row = document.createElement('div'); row.className = 'ctl';
-  row.innerHTML = `<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><input type="number" min="${min}" max="${max}" step="${step}">`;
-  const [rg, nb] = row.querySelectorAll('input'), lab = row.querySelector('label');
+  const row = document.createElement('div'); row.className = 'ctl sl';
+  row.innerHTML = `<label>${label}</label><div class="numbox"><input type="number" min="${min}" max="${max}" step="${step}">${unit ? `<span class="u">${unit}</span>` : ''}` +
+    `<span class="stp"><button type="button" data-d="1" tabindex="-1" aria-label="Increase">${CHEV('m6 15 6-6 6 6')}</button><button type="button" data-d="-1" tabindex="-1" aria-label="Decrease">${CHEV('m6 9 6 6 6-6')}</button></span></div>` +
+    `<button type="button" class="rst"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` +
+    `<input type="range" min="${min}" max="${max}" step="${step}">`;
+  const nb = row.querySelector('input[type=number]'), rg = row.querySelector('input[type=range]'), lab = row.querySelector('label'), rst = row.querySelector('.rst');
+  const def = getDef(key), dp = (String(step).split('.')[1] || '').length;
+  if (typeof def === 'number') rst.title = `Reset to default (${fmt(def)}${unit ? ' ' + unit : ''})`; else rst.style.visibility = 'hidden';
   const sync = () => {
     const v = getK(key), lim = LIMITS[key]?.();
     if (lim) {
@@ -1830,10 +1863,21 @@ function slider(parent, label, key, min, max, step, unit = '', when) {
         lab.append(sm);
       }
     }
-    rg.value = v; nb.value = +(+v).toFixed(2);
+    rg.value = v; nb.value = +(+v).toFixed(2); fillRange(rg);
+    rst.disabled = typeof def !== 'number' || Math.abs(v - def) < 1e-6;
   };
-  rg.addEventListener('input', () => { nb.value = rg.value; changed(key, +rg.value); });
-  nb.addEventListener('change', () => { const v = +nb.value; if (!Number.isFinite(v)) return sync(); rg.value = v; changed(key, v); });
+  const set = v => { rg.value = v; changed(key, v); sync(); };
+  rg.addEventListener('input', () => { nb.value = rg.value; changed(key, +rg.value); rst.disabled = Math.abs(rg.value - def) < 1e-6; });
+  nb.addEventListener('change', () => { const v = +nb.value; if (!Number.isFinite(v)) return sync(); set(v); });
+  const nudge = d => set(+Math.min(+rg.max, Math.max(+rg.min, Math.round((getK(key) + d * step) / step) * step)).toFixed(dp));
+  for (const b of row.querySelectorAll('.stp button')) {
+    // hold to keep stepping
+    let t;
+    const stop = () => { clearTimeout(t); clearInterval(t); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); const d = +b.dataset.d; nudge(d); t = setTimeout(() => { t = setInterval(() => nudge(d), 60); }, 400); });
+    b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop); b.addEventListener('pointercancel', stop);
+  }
+  rst.addEventListener('click', () => set(def));
   parent.append(row); sync();
   return reg(row, when, sync);
 }
@@ -2246,7 +2290,7 @@ function focusConnector() {
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
 {
   const ang = document.getElementById('secAng'), out = document.getElementById('secOut');
-  const setAng = v => { view3.cutAngle = v; ang.value = v; out.textContent = v + '°'; applyCut(); };
+  const setAng = v => { view3.cutAngle = v; ang.value = v; fillRange(ang); out.textContent = v + '°'; applyCut(); };
   ang.addEventListener('input', () => setAng(+ang.value));
   document.getElementById('secZero').addEventListener('click', () => setAng(0));
 }
