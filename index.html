@@ -274,7 +274,7 @@ const DEFAULT = {
   v: 1,
   height: 170, width: 1, aspect: 1, smooth: 0.15, curve: 'smooth',
   profile: [[0, 55], [0.45, 82], [1, 60]],
-  sides: 0, round: 0.35, twist: 0, twistStyle: 'linear', wall: 1.6,
+  sides: 0, round: 0.35, twist: 0, twistStyle: 'linear', flareShape: false, wall: 1.6,
   pat: {
     ribs:    { on: false, count: 24, depth: 2, sharp: 1.5 },
     spiral:  { on: true, count: 24, turns: 0.6, depth: 2.5, sharp: 1.5 },
@@ -424,6 +424,49 @@ function makePattern(Rm) {
 
 const smoothstepE = (e, x) => e <= 0 ? 1 : x >= e ? 1 : x <= 0 ? 0 : (x /= e, x * x * (3 - 2 * x));
 
+// Shaped flare: instead of a straight blend from the round collar to the first row (which flattens the cross-section's
+// lobes into a plain cone), the mean radius blends straight while the lobes keep most of their size until near the
+// collar (1 - (1 - s)^2) and keep turning with the twist. The flare is made as tall as it needs to stay within the
+// overhang limit, found by sampling the slope.
+function shapedFlare(o0, i0, Rco, Rci, N, lim, transH0, H, pend, twAt) {
+  let m0 = 0, mI = 0; for (let j = 0; j < N; j++) { m0 += o0[j]; mI += i0[j]; } m0 /= N; mI /= N;
+  const tU = zz => pend ? 1 - zz / H : zz / H;
+  const rate0 = (twAt(tU(0.5)) - twAt(tU(0))) / 0.5;   // twist per mm at the start of the body
+  const at = (arr, x) => { const u = ((x / TAU * N) % N + N) % N, k = Math.floor(u), f = u - k; return arr[k] + (arr[(k + 1) % N] - arr[k]) * f; };
+  const g = s => 1 - (1 - s) * (1 - s);
+  // the flare may grow to at most 2.5× the straight one; if carrying the twist needs more, drop the twist, and if even
+  // that's too tall, keep the straight flare
+  const fit = rate => {
+    let h = transH0;
+    const outer = (s, j) => { const x = TAU * j / N + rate * (1 - s) * h; return Rco + (m0 - Rco) * s + (at(o0, x) - m0) * g(s); };
+    for (let it = 0; it < 8; it++) {
+      const K = 48; let need = 0;
+      for (let j = 0; j < N; j += 2) for (let k = 0; k < K; k++) need = Math.max(need, Math.abs(outer((k + 1) / K, j) - outer(k / K, j)) * K / Math.tan(lim));
+      if (need <= h * 1.01) return h;
+      h = need * 1.05;
+      if (h > transH0 * 2.5) return null;
+    }
+    return null;
+  };
+  let rate = rate0, transH = fit(rate);
+  if (transH === null && rate !== 0) { rate = 0; transH = fit(0); }
+  if (transH === null) return null;
+  return {
+    transH,
+    row(s, O, I, wT) {
+      for (let j = 0; j < N; j++) {
+        const x = TAU * j / N + rate * (1 - s) * transH;
+        const oS = at(o0, x), iS = at(i0, x);
+        const o = Rco + (m0 - Rco) * s + (oS - m0) * g(s);
+        let n = Rci + (mI - Rci) * s + (iS - mI) * g(s);
+        const w = wT + (oS - iS - wT) * s;
+        n = Math.min(n, Math.max(Rci, o - w));
+        O[j] = o; I[j] = n;
+      }
+    },
+  };
+}
+
 // Builds the shade wall as one closed, indexed mesh in print coordinates (Z up, connector end on the bed).
 function buildShade(N, layer) {
   const prof = buildProfile(), n = prof.length - 1, H = P.height, W = P.width;
@@ -455,7 +498,7 @@ function buildShade(N, layer) {
 
   const o0 = new Float64Array(N), i0 = new Float64Array(N);
   rowBody(0, o0, i0);
-  let zStart = 0, transH = 0, Rco = 0, Rci = 0, wT = 0;
+  let zStart = 0, transH = 0, Rco = 0, Rci = 0, wT = 0, flare = null;
   if (twistMount) {
     Rco = P.collarD / 2 + P.collarWall; Rci = P.collarD / 2;
     wT = P.wall / Math.cos(lim);   // horizontal thickness that keeps the sloped flare at least one wall thick
@@ -463,6 +506,9 @@ function buildShade(N, layer) {
     for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - Rci));
     transH = Math.max(2, md / Math.tan(lim));
     zStart = P.collarH;
+    let mo = 1e9, mi = 1e9; for (let j = 0; j < N; j++) { mo = Math.min(mo, o0[j]); mi = Math.min(mi, i0[j]); }
+    if (P.flareShape && mo >= Rco && mi >= Rci) flare = shapedFlare(o0, i0, Rco, Rci, N, lim, transH, H, pend, twAt);
+    if (flare) transH = flare.transH;
   }
   const zb = zStart + transH;
   const nT = twistMount ? Math.max(2, Math.ceil(transH / layer)) : 0;
@@ -477,7 +523,8 @@ function buildShade(N, layer) {
       const s = i / nT; z = zStart + s * transH;
       // Flare from the collar's own walls (no step, so nothing overhangs at the joint). The trailing wall stays vertical
       // until it's a full sloped-wall thickness away from the leading one, which thickens the joint like a fillet.
-      for (let j = 0; j < N; j++) {
+      if (flare) flare.row(s, O, I, wT);
+      else for (let j = 0; j < N; j++) {
         let o = Rco + (o0[j] - Rco) * s, n = Rci + (i0[j] - Rci) * s;
         const w = wT + (o0[j] - i0[j] - wT) * s;
         if (o0[j] >= Rco) n = Math.min(n, Math.max(Rci, o - w));
@@ -1595,6 +1642,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Corner rounding', 'round', 0, 1, 0.01, '', () => P.sides >= 3);
   slider(p, 'Twist', 'twist', -360, 360, 1, '°');
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
+  toggleRow(p, 'Shape the flare', 'flareShape', () => P.mount === 'twist');
+  note(p, 'The flare is where the shade narrows down to the twist-lock collar. Off: a straight blend, so sides and lobes shrink evenly into a plain cone. On: the cross-section keeps its shape (and keeps twisting) through most of the flare and only rounds off near the collar. The flare gets taller if it must to stay within your overhang limit.', () => P.mount === 'twist');
 }
 
 // Pattern tab
