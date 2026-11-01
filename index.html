@@ -691,7 +691,13 @@ new ResizeObserver(resize).observe(view);
 resize();
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 
-function addSolid(g, geo, mat, cap) { g.add(new THREE.Mesh(geo, mat)); if (view3.cut) g.add(new THREE.Mesh(geo, cap)); }
+// caps are always built and only shown/hidden, so the cutaway never depends on a rebuild having run
+function addCap(parent, geo, cap) { const m = new THREE.Mesh(geo, cap); m.userData.cap = true; m.visible = view3.cut; parent.add(m); }
+function addSolid(g, geo, mat, cap) { g.add(new THREE.Mesh(geo, mat)); addCap(g, geo, cap); }
+function applyCut() {
+  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)] : [];
+  assembly.traverse(o => { if (o.userData.cap) o.visible = view3.cut; });
+}
 function clearGroup(g) { for (const c of [...g.children]) { if (c.isLight) continue; g.remove(c); c.geometry?.dispose(); } }
 function manifoldToGeo(man) {
   const mesh = man.getMesh(), np = mesh.numProp, v = mesh.vertProperties, t = mesh.triVerts;
@@ -730,8 +736,7 @@ function analyse(S, geo) {
 }
 
 function update() {
-  applyConstraints();
-  refreshAll();
+  try { applyConstraints(); refreshAll(); } catch (e) { console.error(e); }
   const S = buildShade(Math.round(P.previewRes), P.previewLayer);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(S.pos, 3));
@@ -780,7 +785,7 @@ function update() {
     lightZ = z + 30;
   }
   // hardware stand-ins are closed shapes too: give them solid cut faces in the cutaway (caps ride along as children)
-  if (view3.cut) for (const m of [...ghostGroup.children]) if (m.isMesh) m.add(new THREE.Mesh(m.geometry, m.material === glowMat ? capGlowMat : capHwMat));
+  for (const m of [...ghostGroup.children]) if (m.isMesh) addCap(m, m.geometry, m.material === glowMat ? capGlowMat : capHwMat);
   bulbLight.position.set(0, 0, lightZ ?? S.zEnd / 2);
   applyLight();
 
@@ -858,11 +863,11 @@ function applyLight() {
   shadeMat.emissiveIntensity = connMat.emissiveIntensity = on ? 0.7 : 0;
   glowMat.emissiveIntensity = on ? 2.5 : 0;
   bulbLight.intensity = on ? 60000 : 0;
-  renderer.clippingPlanes = view3.cut ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)] : [];
+  applyCut();
 }
 
 let pending = false;
-function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); } }); }
+function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); toast('Could not rebuild the model: ' + e.message); } }); }
 
 let saveT = 0;
 function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', JSON.stringify(P)); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
@@ -1191,7 +1196,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 }));
 
 // toolbar
-const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); invalidate(); });
+const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
 tb('tbShade', 'shade'); tb('tbBase', 'base'); tb('tbHw', 'hw'); tb('tbOver', 'over'); tb('tbCut', 'cut'); tb('tbExplode', 'explode'); tb('tbLight', 'light');
 document.getElementById('tbReset').onclick = () => { if (lastStats) frame(lastStats.bb); };
 

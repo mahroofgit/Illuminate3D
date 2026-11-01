@@ -1,6 +1,6 @@
 // Offline support: the page itself is fetched network-first (so updates show up when online),
 // everything else is served from the cache first. Bump CACHE when vendor files change.
-const CACHE = 'illuminate3d-v1';
+const CACHE = 'illuminate3d-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -33,7 +33,9 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(res => {
+    // no-cache: always revalidate with the server so the browser's HTTP cache can't serve an old page
+    // (a navigate-mode Request can't take init options, so fetch by URL)
+    e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put('./index.html', copy));
       return res;
