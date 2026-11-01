@@ -151,8 +151,9 @@ main canvas { display: block; width: 100%; height: 100%; }
 #toolbar button svg { flex: none; }
 #toolbar button[hidden] { display: none; }
 @media (max-width: 1320px) { #toolbar button span { display: none; } #toolbar button { padding: 6px 8px; } }
-#viewpad { position: absolute; right: 14px; bottom: 12px; display: grid; grid-template-areas: ". t . i" "l f r k" ". b . ."; grid-template-columns: repeat(4, 46px); gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#viewpad { position: absolute; right: 14px; bottom: 12px; display: grid; grid-template-areas: "i i i i" ". t . ." "l f r k" ". b . ."; grid-template-columns: repeat(4, 46px); gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
 #viewpad button { border: 0; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 10.5px; padding: 4px 0; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+#viewpad button.fit { display: flex; gap: 6px; justify-content: center; align-items: center; padding: 7px 0; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
 #viewpad button:hover { color: var(--accent); background: var(--accent-soft); }
 #viewpad { bottom: 104px; }   /* clear of the bottom toolbar and the Section bar above it */
 @media (min-width: 1500px) { #viewpad { bottom: 12px; } }
@@ -241,7 +242,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button data-view="right" style="grid-area:r" title="Right view">Right</button>
       <button data-view="back" style="grid-area:k" title="Back view">Back</button>
       <button data-view="bottom" style="grid-area:b" title="Bottom view">Bottom</button>
-      <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg></button>
+      <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen" class="fit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg><span>3D · Fit</span></button>
     </div>
     <div id="colorbox" aria-label="Filament colours"><span class="cbl">Shade</span><button class="chip" data-key="color" title="Shade filament colour"></button><span class="sep"></span><span class="cbl">Base</span><button class="chip" data-key="baseColor" title="Base filament colour"></button>
       <div id="swatches" hidden><div class="swt"></div><div class="grid"></div><label class="custom">Custom colour <input type="color"></label></div></div>
@@ -1352,10 +1353,24 @@ const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, s
 // Section-view caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
 // polygonOffset pulls the section caps forward so they win over faces that touch them (collar on the shade, collar on the base floor)
 const capOpts = { side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
-const capShadeMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x2cb5c8, side: THREE.BackSide });
-const capBaseMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x2f5f6b, side: THREE.BackSide });
-const capHwMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xa89f91, side: THREE.BackSide });
-const capGlowMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xf3e2c4, side: THREE.BackSide });
+// Caps are drawn like a CAD section: a bright fill per part with diagonal hatching, laid out in screen pixels so the
+// lines keep the same spacing at any zoom. Neighbouring parts hatch in opposite directions.
+function hatchMat(fill, line, dir) {
+  const m = new THREE.MeshBasicMaterial({ ...capOpts, color: fill });
+  const u = { uLine: { value: new THREE.Color(line) }, uDir: { value: dir }, uPx: { value: Math.min(2, devicePixelRatio || 1) } };
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = 'uniform vec3 uLine; uniform float uDir; uniform float uPx;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      float s = (gl_FragCoord.x + uDir * gl_FragCoord.y) / uPx;
+      float d = abs(fract(s / 9.0) - 0.5) * 9.0;                       // px from the nearest line centre
+      gl_FragColor.rgb = mix(uLine, gl_FragColor.rgb, smoothstep(0.7, 1.5, d));`);
+  };
+  return m;
+}
+const capShadeMat = hatchMat(0x4cc3ff, 0x1769a8, 1);
+const capBaseMat = hatchMat(0xffa94d, 0xb4561a, -1);
+const capHwMat = hatchMat(0xc9ced4, 0x6d747c, 1);
+const capGlowMat = hatchMat(0xfff0b8, 0xc9a24a, -1);
 const tapeMat = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
