@@ -490,7 +490,8 @@ function buildShade(N, layer) {
   function rowBody(zb, O, I) {
     const tP = zb / H, tU = pend ? 1 - tP : tP;
     const base = pr(tU), tw = twAt(tU);
-    const d = (pr(Math.min(1, tU + 0.004)) - pr(Math.max(0, tU - 0.004))) / (0.008 * H);
+    const t0 = Math.max(0, tU - 0.004), t1 = Math.min(1, tU + 0.004);   // one-sided at the ends, so divide by the real span
+    const d = (pr(t1) - pr(t0)) / ((t1 - t0) * H);
     const wh = P.wall * Math.min(2, Math.sqrt(1 + d * d));
     const fade = smoothstepE(P.fadeConn, zb) * smoothstepE(P.fadeOpen, H - zb);
     const zU = tU * H;
@@ -747,10 +748,10 @@ function skirtSolid(S) {
     const z = zs[i];
     for (let j = 0; j < N; j++) {
       const a = TAU * j / N, ro = outer(z, j);
-      // a shell one shade-wall thick, clear of the neck below the plate (the step there hides in the plate). Over the
-      // last 4 mm its thickness eases to the body's own wall, keeping the outside's slope, so the inside runs on into the
-      // body's with no ledge and no change of angle
-      const u = Math.min(1, Math.max(0, (z - (zTop - 4)) / 4)), b = u * u * (3 - 2 * u);
+      // a shell one shade-wall thick, clear of the neck below the plate (the step there hides in the plate). From the
+      // plate up to the body its thickness eases to the body's own wall, keeping the outside's slope, so the inside runs
+      // on into the body's with no ledge and no change of angle (spread over the whole height so it doesn't show as a band)
+      const u = Math.min(1, Math.max(0, (z - zP) / Math.max(1, zTop - zP))), b = u * u * (3 - 2 * u);
       let ri = Math.max(ro - (wS * (1 - b) + (outTop[j] - inTop[j]) * b), z < zP ? sd.Rni : 0);
       ri = Math.min(ri, ro - 0.5);
       const ko = (i * N + j) * 3, ki = (NM + i * N + j) * 3;
