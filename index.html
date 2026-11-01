@@ -565,6 +565,9 @@ function baseDims() {
 // earlier ones), so the design can never reach a broken state; the sliders show the live range and the reason.
 const lockSlack = () => (P.clearance / (P.collarD / 2 + P.collarWall)) / DEG + 0.6;
 const baseInsert = () => (P.baseType === 'adapter' || P.orient === 'pendant') ? 'socket' : P.insert;
+// cable-grip beads run from just outside the light-source opening (under the cover ramp there's extra headroom)
+const GRIP_MIN = 4;
+const gripStart = B => Math.max(baseFeatureR(B), coverActive(B) ? coverEdge(B) : 0) + 1.5;
 function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
   if (B.adapter) return 0;
   if (B.insert === 'puck') return P.puckD / 2 + B.c + 7;
@@ -593,9 +596,11 @@ const LIMITS = {
     const B = baseDims(), lean = B.Rt - B.H * Math.tan(P.overhang * DEG), wall = baseFeatureR(B) + 2.4;
     // the side is a straight taper, so it must also still be ≥ groove radius + 3 mm at the twist-lock floor height
     const t = B.f / B.H, need = B.gr1 + 3, groove = t < 1 ? (need - B.Rt * t) / (1 - t) : need;
-    const lo = Math.max(lean, wall + (coverActive(B) ? 1 : 0), groove, 20);
+    const grip = !B.adapter && P.cableGrip ? gripStart(B) + GRIP_MIN + 2 + P.footChamfer : 0;
+    const lo = Math.max(lean, wall + (coverActive(B) ? 1 : 0), grip, groove, 20);
     const why = lo === lean ? `a narrower bottom would make the side lean out past your ${P.overhang}° overhang limit.`
       : lo === groove ? `the tapered side has to stay 3 mm thick around the twist-lock grooves near the floor.`
+      : lo === grip ? `the cable channel needs room for the snap-in grip between the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} and the rim.`
       : `the bottom keeps a wall around the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} inside.`;
     return [2 * lo, 240, why];
   },
@@ -749,9 +754,9 @@ function buildBase(seg) {
     // shrink the beads until the cable, cradled on top of them, still fits under the channel roof
     const cableTop = r => r * Math.SQRT2 + Math.sqrt(Math.max(0, (r + rc) ** 2 - hw * hw)) + rc;
     let r = (P.cableW - gap) / 2; while (r > 0.4 && cableTop(r) > P.cableW - 0.1) r -= 0.05;
-    const x0 = Math.max(baseFeatureR(B) + 1.5, coverActive(B) ? coverEdge(B) + P.coverT + 1.5 : 0), x1 = B.Rb - 2 - P.footChamfer, span = x1 - x0;
+    const x0 = gripStart(B), x1 = B.Rb - 2 - P.footChamfer, span = x1 - x0;
     const L = Math.min(8, span >= 12 ? (span - 4) / 2 : span), beads = [];
-    if (r > 0.4 && L >= 3) {
+    if (r > 0.4 && L >= GRIP_MIN - 0.01) {
       const starts = span >= 12 ? [x1 - L, x0] : [x0];
       for (const x of starts) for (const sgn of [-1, 1]) {
         const y0 = sgn * P.cableW / 2;
