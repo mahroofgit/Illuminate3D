@@ -296,7 +296,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
@@ -741,6 +741,34 @@ function skirtSolid(S) {
   }
   return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
 }
+// Stiffening ribs in the hollow between the inner flare and the skirt: thin radial webs that tie the skirt to the flare,
+// so twisting the shade by its skirt doesn't flex the joint. Each web fills (r, z) from the flare's outside to the
+// skirt's outside (both edges buried in those walls) above the skirt's own 45° roof over the neck, so its underside is
+// that roof line and it prints without supports.
+function skirtRibs(S) {
+  const n = P.skirtRibs, g = n > 0 ? skirtGeom(S) : null;
+  if (!g) return [];
+  const { sd, zs, flareRow, outer, rowR, N } = g, H0 = P.collarH, ins = 0.3, w = P.skirtRibW;
+  const roofZ = r => H0 + (sd.Rni - r);   // the skirt's inside roof over the neck
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const a = k * 360 / n + 180 / n, j = Math.round(a / 360 * N) % N;
+    const fl = [], sk = [];
+    for (let i = 0; i < zs.length; i++) {
+      if (flareRow[i] < 0) continue;
+      const z = zs[i], rf = rowR(flareRow[i], false)[j] - ins, ro = outer(z, j) - ins;
+      if (ro - rf < 1) break;                       // skirt has merged into the body
+      if (z >= roofZ(rf)) fl.push([rf, z]);         // flare edge, above the roof
+      if (z >= H0) sk.push([ro, z]);                // skirt edge
+    }
+    if (fl.length < 2 || sk.length < 2) continue;
+    const poly = [[sd.Rni, H0], ...fl, ...sk.slice().reverse()];   // skirt edge ends at (ro, H0), closing along the floor
+    if (sk[0][1] > H0) poly.push([sk[0][0], H0]);
+    const web = keep(keep(new W.CrossSection([poly], 'EvenOdd')).extrude(w));   // this outline runs clockwise
+    out.push(rotZ(tr(rot(web, [90, 0, 0]), 0, w / 2, 0), a));
+  }
+  return out;
+}
 // Click detent on the side wall: one vertical rib per lug on the base's bore wall, standing above the lug grooves and
 // reaching `detentFit` mm into the collar. The collar has, at each rib: a full-height entry channel (the collar slides
 // down past the rib), a shallow relief track for the twist, a short unrecessed hump just before the end (the click),
@@ -816,7 +844,7 @@ function shadeConnector(S, seg, overlap = 0.4) {
     const dif = diffuserOn() ? diffuserSolid(S, seg) : null;
     if (dif && !dif.isEmpty()) list.push(dif);
     const sk = skirtOn() ? skirtSolid(S) : null;
-    if (sk) list.push(sk);
+    if (sk) list.push(sk, ...skirtRibs(S));
     return uni(list);
   }
   return null;
@@ -1924,6 +1952,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
   note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
   toggleRow(p, 'Shade skirt', 'skirt', tableBase);
+  slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
+  note(p, 'Thin webs in the hollow between the shade’s inner flare and the skirt, tying them together so the joint doesn’t flex when you twist the shade by its skirt. Their undersides follow the skirt’s 45° inner roof, so they print without supports.', () => tableBase() && P.skirt);
+  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
   note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
   const styledOn = () => tableBase() && P.baseStyle !== 'plain';
   segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
@@ -2308,7 +2339,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { skirtRibs, skirtGeom, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
