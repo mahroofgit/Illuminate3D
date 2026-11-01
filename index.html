@@ -289,7 +289,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffChamfer: 3, coverFit: 0.1,
@@ -636,6 +636,76 @@ function diffuserSolid(S, seg) {
   if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // vent hole
   return keep(sheet.intersect(inside));
 }
+// Skirt: an outer shell on the shade that carries its outline down past the flare to meet the base, so shade and base
+// read as one shape. The base's top above a small step (zL, just under the collar's floor) becomes a plain neck that
+// keeps the usual wall around the twist-lock grooves; the skirt slides down over it with radial clearance and turns
+// freely with the lock. The skirt's bottom edge is level with the collar's, on the bed, so it prints without supports.
+const skirtOn = () => P.skirt && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter';
+function skirtDims(B) {
+  const Rneck = B.gr1 + 3, Rni = Rneck + 0.6;   // neck outside / skirt inside (0.6 mm turning clearance)
+  return { Rneck, Rni, zL: B.f - 0.6 };
+}
+function shadeTwistRate(H, pend) {   // twist per mm at the start of the shade body (radians)
+  const twR = P.twist * DEG, twAt = t => P.twistStyle === 'ease' ? twR * t * t * (3 - 2 * t) : P.twistStyle === 'wave' ? twR * Math.sin(Math.PI * t) : twR * t;
+  const tU = zz => pend ? 1 - zz / H : zz / H;
+  return (twAt(tU(0.5)) - twAt(tU(0))) / 0.5;
+}
+function skirtGeom(S) {
+  const B = baseDims(), sd = skirtDims(B), N = S.N, NM = N * S.M, zb = S.zb;
+  let iTop = 0; while (iTop < S.M - 1 && S.rowZ[iTop] < zb - 1e-6) iTop++;
+  const rowR = (i, inner) => { const r = new Float64Array(N), off = inner ? NM : 0; for (let j = 0; j < N; j++) { const k = (off + i * N + j) * 3; r[j] = Math.hypot(S.pos[k], S.pos[k + 1]); } return r; };
+  const o0 = rowR(iTop);
+  let m0 = 0; for (let j = 0; j < N; j++) m0 += o0[j]; m0 /= N;
+  if (m0 < sd.Rni + 4) return null;   // the shade's bottom isn't wider than the base neck: nothing to cover
+  const surf = baseSurface(B), turn = P.turn * DEG, Bo = new Float64Array(N);
+  let Bm = 0;
+  for (let j = 0; j < N; j++) { Bo[j] = Math.max(sd.Rni + 1.6, surf(TAU * j / N - turn, sd.zL)); Bm += Bo[j]; } Bm /= N;
+  const rate = shadeTwistRate(P.height, P.orient === 'pendant');
+  const at = (arr, x) => { const u = ((x / TAU * N) % N + N) % N, k = Math.floor(u), f = u - k; return arr[k] + (arr[(k + 1) % N] - arr[k]) * f; };
+  const outer = (z, j) => { const s = z / zb, x = TAU * j / N + rate * (zb - z); return Bm + (m0 - Bm) * s + (at(o0, x) - m0) * s + (Bo[j] - Bm) * (1 - s); };
+  // rows: straight part beside the neck, then the shade's own flare rows so the inside can follow the flare exactly
+  const zs = [], flareRow = [];
+  const nLow = Math.max(2, Math.ceil(P.collarH / 0.8));
+  for (let i = 0; i < nLow; i++) { zs.push(P.collarH * i / nLow); flareRow.push(-1); }
+  for (let i = 0; i <= iTop; i++) { zs.push(S.rowZ[i]); flareRow.push(i); }
+  let maxDeg = 0;
+  for (let i = 0; i < zs.length - 1; i++) for (let j = 0; j < N; j += 2) {
+    const d = (outer(zs[i + 1], j) - outer(zs[i], j)) / Math.max(1e-6, zs[i + 1] - zs[i]);
+    if (d > 0) maxDeg = Math.max(maxDeg, Math.atan(d) / DEG);
+  }
+  return { sd, zs, flareRow, outer, rowR, N, NM, maxDeg, iTop };
+}
+function skirtSolid(S) {
+  const g = skirtGeom(S);
+  if (!g) return null;
+  const { sd, zs, flareRow, outer, rowR, N } = g, M = zs.length, NM = N * M, v = new Float32Array(NM * 2 * 3);
+  const wS = P.wall / Math.cos(Math.min(60, g.maxDeg) * DEG);   // horizontal thickness for a wall-thick sloped shell
+  for (let i = 0; i < M; i++) {
+    const z = zs[i], fi = flareRow[i] >= 0 ? rowR(flareRow[i], true) : null;
+    for (let j = 0; j < N; j++) {
+      const a = TAU * j / N, ro = outer(z, j);
+      // a shell one shade-wall thick; it stays clear of the neck up to the collar top (then at most a 45° roof, which
+      // prints) and never reaches into the light space inside the flare
+      let ri = Math.max(ro - wS, z <= P.collarH ? sd.Rni : sd.Rni - (z - P.collarH), fi ? fi[j] + 0.3 : 0);
+      ri = Math.min(ri, ro - 0.5);
+      const ko = (i * N + j) * 3, ki = (NM + i * N + j) * 3;
+      v[ko] = ro * Math.cos(a); v[ko + 1] = ro * Math.sin(a); v[ko + 2] = z;
+      v[ki] = ri * Math.cos(a); v[ki + 1] = ri * Math.sin(a); v[ki + 2] = z;
+    }
+  }
+  const tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d, NM + a, NM + c, NM + b, NM + a, NM + d, NM + c);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N;
+    tri.push(j, NM + j, NM + j1, j, NM + j1, j1);
+    tri.push(top + j, NM + top + j1, NM + top + j, top + j, top + j1, NM + top + j1);
+  }
+  return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
+}
 function shadeConnector(S, seg, overlap = 0.4) {
   if (P.mount === 'ring') {
     const holeR = P.holeD / 2, T = P.plateT;
@@ -664,6 +734,8 @@ function shadeConnector(S, seg, overlap = 0.4) {
     for (let k = 0; k < P.lugs; k++) list.push(rotZ(revolve(lugPoly, P.lugW, seg), k * 360 / P.lugs - P.lugW / 2));
     const dif = diffuserOn() ? diffuserSolid(S, seg) : null;
     if (dif && !dif.isEmpty()) list.push(dif);
+    const sk = skirtOn() ? skirtSolid(S) : null;
+    if (sk) list.push(sk);
     return uni(list);
   }
   return null;
@@ -725,7 +797,14 @@ const LIMITS = {
     const lo = ins === 'puck' ? P.puckD + 4 : ins === 'slot' ? P.slotD + 2 * P.clearance + 8 : P.holeD + 12;
     return [Math.max(30, lo), 160, ins === 'socket' ? `the collar has to clear the Ø${fmt(P.holeD)} socket.` : `the puck (Ø${fmt(ins === 'puck' ? P.puckD : P.slotD)}) has to fit inside the collar.`];
   },
-  baseTopD: () => { const B = baseDims(); return [2 * (B.gr1 + 3), 240, `the top keeps 3 mm of wall around the twist-lock grooves. Lower the collar Ø to make the base narrower.`]; },
+  baseTopD: () => {
+    const B = baseDims(); let lo = 2 * (B.gr1 + 3);
+    if (skirtOn()) {   // the step under the skirt must be wide enough for the skirt's bottom edge to sit on
+      const sd = skirtDims(B), need = sd.Rni + 2, t = sd.zL / B.H;
+      if (t > 0 && t < 1) lo = Math.max(lo, 2 * (need - B.Rb * (1 - t)) / t);
+    }
+    return [lo, 240, skirtOn() ? `the step under the skirt needs room for the skirt’s bottom edge outside the neck.` : `the top keeps 3 mm of wall around the twist-lock grooves. Lower the collar Ø to make the base narrower.`];
+  },
   baseH: () => { const B = baseDims(); return [B.minH, 150, `the base has to hold ${B.minParts} mm.`]; },
   baseD: () => {
     const B = baseDims(), lean = B.Rt - B.H * Math.tan(P.overhang * DEG), wall = baseFeatureR(B) + 2.4;
@@ -894,9 +973,12 @@ function buildCover(seg) {
 // cover's lock grooves below it), so every connector cut afterwards is exactly what the plain base gets.
 // 'match' borrows the shade's cross-section and patterns, lined up with the shade as it sits locked (turned by the lock
 // angle) and with a linear twist carried on down; 'custom' has its own sides / rounding / twist.
-function baseOuter(B, seg) {
-  const H = B.H, f = B.f, fc = P.footChamfer, match = P.baseStyle === 'match';
-  const N = Math.max(128, seg * 2), dz = seg >= 128 ? 0.35 : 0.6;
+// The styled base's outside as a function r(a, z) (a = angle in the base's own frame), shared by the base and by the
+// shade's skirt, whose bottom edge has to meet it.
+function baseSurface(B) {
+  const H = B.H, f = B.f, fc = P.footChamfer, match = P.baseStyle === 'match', plain = P.baseStyle === 'plain';
+  const taper = z => B.Rb + (B.Rt - B.Rb) * z / H;
+  if (plain) return (a, z) => taper(z) - (z < fc ? fc - z : 0);
   const shapeF = match ? makeShapeF() : makeShapeF(P.baseSides, P.baseRound, 1);
   let Rm = 0; if (P.basePat) { const prof = buildProfile(); for (const v of prof) Rm += v * P.width; Rm /= prof.length; }
   const patt = P.basePat ? makePattern(Rm) : null, k = P.basePatScale;
@@ -904,6 +986,19 @@ function baseOuter(B, seg) {
   const slope = P.twistStyle === 'linear' ? P.twist * DEG : P.twistStyle === 'wave' ? P.twist * DEG * Math.PI : 0;
   const twAt = z => match ? slope * (z - f - P.collarH) / Hs : P.baseTwist * DEG * z / H;
   const inner = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0), need = z => (z >= f - 0.5 ? B.gr1 : inner) + 2.4;
+  const top = skirtOn() ? skirtDims(B).zL : H;   // with a skirt the visible top edge is the step under it
+  return (a0, z) => {
+    const r0 = taper(z), a = a0 + turn - twAt(z), t = match ? (z - f - P.collarH) / Hs : z / Hs;
+    const fade = smoothstepE(P.baseFade, z) * smoothstepE(P.baseFade, top - z);
+    let r = r0 * shapeF(a);
+    if (patt && fade > 0) r += k * fade * patt(a, t, t * Hs, r0);
+    r = Math.max(r, need(z));
+    return z < fc ? r - (fc - z) : r;
+  };
+}
+function baseOuter(B, seg) {
+  const H = B.H, fc = P.footChamfer, surf = baseSurface(B);
+  const N = Math.max(128, seg * 2), dz = seg >= 128 ? 0.35 : 0.6;
   const zs = [];
   const nz = Math.max(2, Math.ceil(H / dz));
   for (let i = 0; i <= nz; i++) zs.push(H * i / nz);
@@ -911,15 +1006,9 @@ function baseOuter(B, seg) {
   const M = zs.length, NM = N * M, v = new Float32Array(NM * 3 + 6);
   let Rmax = 0;
   for (let i = 0; i < M; i++) {
-    const z = zs[i], r0 = B.Rb + (B.Rt - B.Rb) * z / H, tw = twAt(z);
-    const t = match ? (z - f - P.collarH) / Hs : z / Hs;
-    const fade = smoothstepE(P.baseFade, z) * smoothstepE(P.baseFade, H - z);
+    const z = zs[i];
     for (let j = 0; j < N; j++) {
-      const a0 = TAU * j / N, a = a0 + turn - tw;
-      let r = r0 * shapeF(a);
-      if (patt && fade > 0) r += k * fade * patt(a, t, t * Hs, r0);
-      r = Math.max(r, need(z));
-      if (z < fc) r -= fc - z;
+      const a0 = TAU * j / N, r = surf(a0, z);
       const q = (i * N + j) * 3; v[q] = r * Math.cos(a0); v[q + 1] = r * Math.sin(a0); v[q + 2] = z;
       if (r > Rmax) Rmax = r;
     }
@@ -938,8 +1027,12 @@ function baseOuter(B, seg) {
 function buildBase(seg) {
   const B = baseDims(), { H, f } = B;
   const styled = !B.adapter && P.baseStyle !== 'plain' ? baseOuter(B, seg) : null;
-  const body = styled ? styled.man : B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer], [B.Rt, H], [0, H]] : [[0, 0], [B.Rb, 0], [B.Rt, H], [0, H]], 360, seg);
+  let body = styled ? styled.man : B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer], [B.Rt, H], [0, H]] : [[0, 0], [B.Rb, 0], [B.Rt, H], [0, H]], 360, seg);
   const Rmax = styled ? styled.Rmax : Math.max(B.Rb, B.Rt);   // outermost surface, for cuts that run out through the side
+  if (skirtOn()) {   // neck under the shade's skirt: full outline up to the step, then a plain cylinder to the top
+    const sd = skirtDims(B);
+    body = keep(body.intersect(uni([cyl(sd.zL, Rmax + 5, Rmax + 5, seg), tr(cyl(H - sd.zL + 1, sd.Rneck, sd.Rneck, seg), 0, 0, sd.zL - 0.01)])));
+  }
   const cut = [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
   const ca = (B.c / B.Ro) / DEG + 0.6;
@@ -1231,6 +1324,12 @@ function update() {
       const rr = riserR(B); let clash = false;
       for (let i = 0; i < S.M; i++) if (S.rowZ[i] <= lift + 0.5 && S.rowMinIn[i] < rr + B.c) clash = true;
       checks.push([!clash, clash ? `The ${fmt(lift)} mm puck riser would touch the shade’s inner wall — lower it or widen the shade near the collar` : `Puck raised ${fmt(lift)} mm on a riser inside the collar`]);
+    }
+    if (skirtOn()) {
+      const g = skirtGeom(S);
+      checks.push(!g ? [false, 'The shade’s bottom is no wider than the base neck, so there’s nothing for the skirt to cover — widen the shade’s bottom']
+        : g.maxDeg > P.overhang + 0.5 ? [false, `The skirt overhangs ${g.maxDeg.toFixed(0)}° (limit ${P.overhang}°) — widen the base top or narrow the shade’s bottom`]
+        : [true, `Skirt covers the base neck (max overhang ${g.maxDeg.toFixed(0)}°)`]);
     }
     if (intakeOn()) {
       const hs = intakeLayout(B), lo = Math.min(...hs.map(h => h.g.th / DEG)), hi = Math.max(...hs.map(h => h.g.th / DEG));
@@ -1746,6 +1845,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
   slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
   note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
+  toggleRow(p, 'Shade skirt', 'skirt', tableBase);
+  note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
   const styledOn = () => tableBase() && P.baseStyle !== 'plain';
   segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
   note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);

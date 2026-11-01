@@ -15,6 +15,7 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
     - **Socket adapter** for pendants.
   - Optional **bottom cover** (twist-lock with a wedge that locks it tight, or a snap-in bar), **puck riser** and a **diffuser** inside the shade over the puck (support-free cone, or flat with slicer supports; optional centre vent hole).
 - **Styled base** – give the table base the shade’s cross-section and patterns (lined up with the locked shade) or its own sides and twist; the lock, cavity, cover and vents inside are never touched.
+- **Shade skirt** – an outer shell carries the shade’s outline down over a neck on the base, so shade and base read as one form; it prints from the bed without supports.
 - **Light-source presets** – one click applies a whole puck/slot/diffuser/cable/cover setup (built-in *3mm LED Puck*), and you can save your own.
 - **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance, weight estimate.
 - **Export** – each part as its own STL, or **Export print plate**: shade, base and cover laid out together on your printer's bed, oriented for printing, in one STL.
