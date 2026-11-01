@@ -33,14 +33,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #app { display: grid; grid-template-columns: 384px 1fr; height: 100vh; }
 aside { display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; }
 header { padding: 14px 16px 10px; display: flex; align-items: baseline; gap: 8px; }
-header h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.02em; }
 #projName { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 2px 6px; border-radius: 6px; cursor: text; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #projName:hover { background: var(--panel-2); color: var(--text); }
 #projDirty { color: var(--accent); font-size: 10px; visibility: hidden; }
 #projDirty.on { visibility: visible; }
 #filebar { display: flex; gap: 4px; padding: 0 12px 10px; }
-#filebar button { flex: 1; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 5px 0; font: inherit; font-size: 12px; cursor: pointer; }
-#filebar button:hover { border-color: var(--accent); }
+#filebar button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 8px; padding: 6px 0; font: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: -.005em; cursor: pointer; white-space: nowrap; }
+#filebar button:hover { background: var(--panel-2); color: var(--text); border-color: var(--line); }
+#filebar button svg, nav button svg { flex: none; opacity: .9; }
 #filebar button.icon { flex: 0 0 34px; display: grid; place-items: center; }
 #filebar button:disabled { opacity: .35; cursor: default; border-color: var(--line); }
 #toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; }
@@ -63,7 +64,8 @@ header h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
 .pcard .pact button:hover { background: var(--panel); color: var(--text); }
 .pempty { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 40px 0; }
 nav { display: flex; gap: 4px; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
-nav button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
+nav button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: -.005em; cursor: pointer; white-space: nowrap; }
+nav button:hover:not(.on) { background: var(--panel-2); color: var(--text); }
 nav button.on { background: var(--accent-soft); color: var(--accent); }
 #panels { flex: 1; overflow-y: auto; padding: 4px 16px 16px; min-height: 0; }
 .panel { display: none; } .panel.on { display: block; }
@@ -147,16 +149,16 @@ main canvas { display: block; width: 100%; height: 100%; }
   <aside>
     <header><h1>Illuminate3D</h1><button id="projName" title="Rename project"></button><span id="projDirty" title="Unsaved changes">●</span></header>
     <div id="filebar">
-      <button id="fNew" title="Start a new design">New</button>
-      <button id="fOpen" title="Open a saved project (⌘O)">Open…</button>
-      <button id="fSave" title="Save (⌘S)">Save</button>
-      <button id="fSaveAs" title="Save a copy under a new name">Save as…</button>
+      <button id="fNew" title="Start a new design"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6M12 18v-6"/></svg><span>New</span></button>
+      <button id="fOpen" title="Open a saved project (⌘O)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span>Open…</span></button>
+      <button id="fSave" title="Save (⌘S)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg><span>Save</span></button>
+      <button id="fSaveAs" title="Save a copy under a new name"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/><path d="M15 12v6M12 15h6"/></svg><span>Save as…</span></button>
     </div>
     <nav id="tabs">
-      <button data-tab="shape" class="on">Shape</button>
-      <button data-tab="pattern">Pattern</button>
-      <button data-tab="connector">Connector</button>
-      <button data-tab="print">Print</button>
+      <button data-tab="shape" class="on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2c0 4-4 6-4 11a6 6 0 0 0 12 0c0-5-4-7-4-11"/><path d="M8 22h8"/></svg><span>Shape</span></button>
+      <button data-tab="pattern"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></svg><span>Pattern</span></button>
+      <button data-tab="connector"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg><span>Connector</span></button>
+      <button data-tab="print"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg><span>Print</span></button>
     </nav>
     <div id="panels">
       <div class="panel on" id="p-shape"></div>
@@ -1007,6 +1009,7 @@ function update() {
   keyLight.target.position.copy(ctr);
   if (firstFrame) { frame(bb); firstFrame = false; }
   lastStats = { bb };
+  if (focusPending && baseGroup.children.length && document.querySelector('#tabs .on')?.dataset.tab === 'connector') { focusPending = false; requestAnimationFrame(focusConnector); }
   drawProfile();
   updateTitle();
   scheduleHistory();
@@ -1038,9 +1041,9 @@ function updateUndoButtons() {
 }
 const VIEWS = { front: [0, 0, 1], back: [0, 0, -1], right: [1, 0, 0], left: [-1, 0, 0], top: [0, 1, 0.0001], bottom: [0, -1, 0.0001], iso: [0.55, 0.35, 0.76] };
 let viewAnim = 0;
-function setView(name) {
-  if (!lastStats) return;
-  const bb = lastStats.bb, ctr = bb.getCenter(new THREE.Vector3()), r = bb.getSize(new THREE.Vector3()).length() / 2;
+function setView(name, bb = lastStats?.bb) {
+  if (!bb) return;
+  const ctr = bb.getCenter(new THREE.Vector3()), r = bb.getSize(new THREE.Vector3()).length() / 2;
   const dist = r / Math.sin(camera.fov * DEG / 2) * 1.05;
   const to = new THREE.Vector3(...VIEWS[name]).normalize().multiplyScalar(dist).add(ctr);
   const from = camera.position.clone(), t0 = controls.target.clone(), id = ++viewAnim, start = performance.now();
@@ -1427,7 +1430,24 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.panel').forEach(x => x.classList.toggle('on', x.id === 'p-' + b.dataset.tab));
   if (b.dataset.tab === 'shape') drawProfile();
+  if (b.dataset.tab === 'connector') focusConnector();
+  else if (autoCut) { autoCut = false; if (view3.cut) document.getElementById('tbCut').click(); setView('iso'); }
 }));
+// Opening the Connector tab swings to a front cutaway close on the base and the collar joint; leaving it puts the
+// cutaway back (if it was switched on here) and fits the whole lamp again. The 3D button also fits everything.
+let autoCut = false, focusPending = false;
+function focusConnector() {
+  if (!lastStats || !W) { focusPending = true; return; }   // still loading: do it after the first full build
+  if (!view3.cut) { document.getElementById('tbCut').click(); autoCut = true; }
+  assembly.updateMatrixWorld(true);
+  const bb = P.mount === 'twist' && view3.base ? new THREE.Box3().setFromObject(baseGroup) : null;
+  if (bb && bb.isEmpty()) { focusPending = true; return; }   // base not built yet
+  if (!bb) return setView('front');
+  const s = bb.getSize(new THREE.Vector3());
+  bb.expandByVector(new THREE.Vector3(0, P.collarH + 12, 0));   // take in the collar and the start of the flare
+  bb.expandByScalar(Math.max(4, s.x * 0.04));
+  setView('front', bb);
+}
 
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
