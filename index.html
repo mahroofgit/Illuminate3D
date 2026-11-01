@@ -663,7 +663,17 @@ function skirtGeom(S) {
   for (let j = 0; j < N; j++) { Bo[j] = Math.max(sd.Rni + 1.6, surf(TAU * j / N - turn, sd.zL)); Bm += Bo[j]; } Bm /= N;
   const rate = shadeTwistRate(P.height, P.orient === 'pendant');
   const at = (arr, x) => { const u = ((x / TAU * N) % N + N) % N, k = Math.floor(u), f = u - k; return arr[k] + (arr[(k + 1) % N] - arr[k]) * f; };
-  const outer = (z, j) => { const s = z / zb, x = TAU * j / N + rate * (zb - z); return Bm + (m0 - Bm) * s + (at(o0, x) - m0) * s + (Bo[j] - Bm) * (1 - s); };
+  const lin = (z, j) => { const s = z / zb, x = TAU * j / N + rate * (zb - z); return Bm + (m0 - Bm) * s + (at(o0, x) - m0) * s + (Bo[j] - Bm) * (1 - s); };
+  // Hermite end tangents so the skirt runs smoothly into the shade body at the top and on from the base's side at the
+  // bottom (no crease at either joint): add the slope difference with the basis functions s³-s² (top) and s³-2s²+s (bottom)
+  const o1 = rowR(Math.min(S.M - 1, iTop + 1)), dzTop = Math.max(1e-6, S.rowZ[Math.min(S.M - 1, iTop + 1)] - S.rowZ[iTop]);
+  const e = Math.min(0.5, zb / 20), fix = new Float64Array(N * 2);
+  for (let j = 0; j < N; j++) {
+    const top = (o1[j] - o0[j]) / dzTop - (lin(zb, j) - lin(zb - e, j)) / e;
+    const a = TAU * j / N - turn, bot = (surf(a, sd.zL) - surf(a, sd.zL - 1)) - (lin(e, j) - lin(0, j)) / e;
+    fix[j * 2] = top * zb; fix[j * 2 + 1] = bot * zb;
+  }
+  const outer = (z, j) => { const s = z / zb; return lin(z, j) + fix[j * 2] * (s * s * s - s * s) + fix[j * 2 + 1] * (s * s * s - 2 * s * s + s); };
   // rows: straight part beside the neck, then the shade's own flare rows so the inside can follow the flare exactly
   const zs = [], flareRow = [];
   const nLow = Math.max(2, Math.ceil(P.collarH / 0.8));
@@ -1850,13 +1860,14 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'An outer shell on the shade that carries its outline down past the flare to the base, so the two read as one shape. Above a small step the base’s top becomes a plain neck; the skirt slides down over it with 0.6 mm clearance and turns with the lock. The skirt’s bottom edge sits level with the collar on the bed, so it prints without supports. The lock, light source and vents are unchanged.', tableBase);
   const styledOn = () => tableBase() && P.baseStyle !== 'plain';
   segmented(p, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
-  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
+  note(p, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
   slider(p, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
   slider(p, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
   slider(p, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
-  toggleRow(p, 'Shade patterns on base', 'basePat', styledOn);
-  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && P.basePat);
-  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && P.basePat);
+  const anyPat = () => Object.values(P.pat).some(q => q.on);
+  toggleRow(p, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
+  slider(p, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
+  slider(p, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
 
   h3(p, 'Twist lock', twistOn);
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
