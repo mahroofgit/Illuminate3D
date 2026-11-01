@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2420"/>
+      <stop offset="1" stop-color="#14110f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.52" r="0.5">
+      <stop offset="0" stop-color="#ffcf8a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffcf8a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8964a"/>
+      <stop offset="0.5" stop-color="#ffd89e"/>
+      <stop offset="1" stop-color="#e08a3e"/>
+    </linearGradient>
+    <clipPath id="body"><path d="M196 118 C176 170 150 230 150 290 C150 350 176 384 206 396 L306 396 C336 384 362 350 362 290 C362 230 336 170 316 118 Z"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="268" r="220" fill="url(#glow)"/>
+  <path d="M196 118 C176 170 150 230 150 290 C150 350 176 384 206 396 L306 396 C336 384 362 350 362 290 C362 230 336 170 316 118 Z" fill="url(#shade)"/>
+  <g clip-path="url(#body)" stroke="#b8642a" stroke-opacity="0.45" stroke-width="7" fill="none">
+    <path d="M120 150 C190 210 230 330 250 430"/><path d="M160 120 C230 190 270 320 290 430"/>
+    <path d="M200 100 C270 170 310 310 330 430"/><path d="M240 90 C310 160 350 300 370 430"/>
+    <path d="M280 90 C350 160 390 300 410 430"/><path d="M80 170 C150 230 190 340 210 430"/>
+  </g>
+  <rect x="190" y="396" width="132" height="34" rx="10" fill="#4a403a"/>
+  <rect x="160" y="424" width="192" height="22" rx="11" fill="#3a322d"/>
+</svg>

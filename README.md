@@ -20,6 +20,16 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
 
 Print the shade connector-end down, supports off, 0.2 mm layers, 3 walls, 0% infill. Bases print upright. Start the twist-lock at 0.3 mm clearance (0.4 mm for PETG). Measure your holder and puck with calipers — the built-in sizes are typical values. Use LED bulbs only.
 
+## Install as an app
+
+Illuminate3D is a Progressive Web App: install it once and it gets its own icon and window, and works offline.
+
+- **Mac – Safari** (macOS Sonoma or later): open the live app, then **File → Add to Dock**.
+- **Mac – Chrome / Edge**: click the install icon at the right end of the address bar (or **⋮ → Cast, save and share → Install page as app**).
+- **iPhone / iPad**: Safari → Share → **Add to Home Screen**.
+
+The installed app checks for updates whenever you are online and opens from its offline cache otherwise.
+
 ## Running locally
 
 The app is a single `index.html` with its libraries in `vendor/`, so it works offline. Browsers won't load modules from `file://`, so serve the folder:

@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Illuminate3D</title>
+<meta name="description" content="Design 3D-printable lampshades with twist-lock, socket and LED puck connectors.">
+<meta name="theme-color" content="#1f1f21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Illuminate3D">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root {
   --bg: #f4f3f0; --panel: #ffffff; --panel-2: #f7f6f3; --line: #e3e1dc; --text: #1d1d1f; --muted: #6e6e73;
@@ -1115,6 +1124,7 @@ busy.classList.add('on');
 update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
 window.__lamp = { get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
