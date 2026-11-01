@@ -14,9 +14,11 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
     - **Table base** with an LED puck pocket, a **slot-in puck** seat (push a small puck up edgewise through a slot, turn it flat; straight slot for a low base or a finger funnel), or a bulb-socket mount with a holder cavity.
     - **Socket adapter** for pendants.
   - Optional **bottom cover** (twist-lock with a wedge that locks it tight, or a snap-in bar), **puck riser** and a **diffuser** inside the shade over the puck (support-free cone, or flat with slicer supports; optional centre vent hole).
+- **Light-source presets** – one click applies a whole puck/slot/diffuser/cable/cover setup (built-in *3mm LED Puck*), and you can save your own.
 - **Print checks** – overhangs above your limit shown in red, printer bed fit, puck/collar fit, bulb clearance, weight estimate.
 - **Export** – each part as its own STL, or **Export print plate**: shade, base and cover laid out together on your printer's bed, oriented for printing, in one STL.
 - **Projects** – New / Open / Save / Save as (⌘S, ⌘O), undo / redo (⌘Z, ⇧⌘Z), with thumbnails, stored in the browser; export and import `.json` files to back up or move designs.
+- Collapsible setting groups.
 - Viewer with solid-section cutaway, exploded view, lamp-on preview, and toggles to show or hide the shade, base and hardware.
 
 ## Printing tips
