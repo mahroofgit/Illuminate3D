@@ -296,7 +296,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, skirtJoint: 'cone', skirtPlateT: 2, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', skirt: false, skirtJoint: 'flat', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
@@ -520,10 +520,10 @@ function buildShade(N, layer) {
   }
   const zb = zStart + transH;
   // flat skirt joint: no flare at all. The body starts at zb (the skirt and its plate carry it from the collar), with
-  // one short vertical row below it so it overlaps the skirt's top instead of just touching it
+  // one short, thin row below it, buried mid-wall in the skirt's top, so the two overlap instead of just touching
   let o0m = 0; for (let j = 0; j < N; j++) o0m += o0[j]; o0m /= N;
   const flatJ = twistMount && flatSkirtOn() && o0m >= skirtDims(baseDims()).Rni + 4;
-  if (flatJ) { zStart = zb - 0.4; transH = 0.4; }
+  if (flatJ) { zStart = zb - 0.2; transH = 0.2; }
   const nT = flatJ ? 1 : twistMount ? Math.max(2, Math.ceil(transH / layer)) : 0;
   const nB = Math.max(2, Math.ceil(H / layer));
   const M = nT + nB + 1, NM = N * M;
@@ -536,7 +536,7 @@ function buildShade(N, layer) {
       const s = i / nT; z = zStart + s * transH;
       // Flare from the collar's own walls (no step, so nothing overhangs at the joint). The trailing wall stays vertical
       // until it's a full sloped-wall thickness away from the leading one, which thickens the joint like a fillet.
-      if (flatJ) { O.set(o0); I.set(i0); }
+      if (flatJ) for (let j = 0; j < N; j++) { const m = (o0[j] + i0[j]) / 2; O[j] = m + 0.15; I[j] = m - 0.15; }
       else if (flare) flare.row(s, O, I, wT);
       else for (let j = 0; j < N; j++) {
         let o = Rco + (o0[j] - Rco) * s, n = Rci + (i0[j] - Rci) * s;
@@ -742,7 +742,7 @@ function skirtSolid(S) {
   const g = skirtGeom(S);
   if (!g) return null;
   const { sd, zs, flareRow, outer, rowR, N } = g, M = zs.length, NM = N * M, v = new Float32Array(NM * 2 * 3);
-  const wS = g.wS, zP = P.collarH + P.skirtPlateT - 1e-6;
+  const wS = g.wS, zP = P.collarH + P.skirtPlateT - 1e-6, zTop = zs[M - 1], inTop = g.flat ? rowR(g.iTop, true) : null;
   for (let i = 0; i < M; i++) {
     const z = zs[i], fi = flareRow[i] >= 0 ? rowR(flareRow[i], true) : null;
     for (let j = 0; j < N; j++) {
@@ -750,8 +750,12 @@ function skirtSolid(S) {
       // a shell one shade-wall thick; it stays clear of the neck up to the collar top (then at most a 45° roof, which
       // prints) and never reaches into the light space inside the flare
       // flat joint: clear of the neck below the plate, a plain wall-thick shell above it (the step hides in the plate)
-      let ri = g.flat ? Math.max(ro - wS, z < zP ? sd.Rni : 0, fi ? fi[j] + 0.3 : 0)
-        : Math.max(ro - wS, z <= P.collarH ? sd.Rni : sd.Rni - (z - P.collarH), fi ? fi[j] + 0.3 : 0);
+      // and over the last 4 mm it thins to the body's own wall, so the inside runs on into the body's without a ledge
+      let ri;
+      if (g.flat) {
+        const u = Math.min(1, Math.max(0, (z - (zTop - 4)) / 4)), b = u * u * (3 - 2 * u);
+        ri = Math.max((ro - wS) * (1 - b) + inTop[j] * b, z < zP ? sd.Rni : 0);
+      } else ri = Math.max(ro - wS, z <= P.collarH ? sd.Rni : sd.Rni - (z - P.collarH), fi ? fi[j] + 0.3 : 0);
       ri = Math.min(ri, ro - 0.5);
       const ko = (i * N + j) * 3, ki = (NM + i * N + j) * 3;
       v[ko] = ro * Math.cos(a); v[ko + 1] = ro * Math.sin(a); v[ko + 2] = z;
@@ -786,6 +790,30 @@ function skirtPlate(S) {
   }
   for (let j = 0; j < 96; j++) { const a = -TAU * j / 96; hole.push([Ri * Math.cos(a), Ri * Math.sin(a)]); }
   return tr(extrudeXS([oc, hole], T), 0, 0, z0);
+}
+// Flat joint: a 45° chamfer ring on top of the plate where it meets the skirt's wall (it follows the wall's outline).
+// Its cross-section per column: inner foot on the plate, outer foot and top buried 0.3 mm in the wall.
+function skirtChamfer(S) {
+  const c = P.skirtChamfer, g = c > 0 ? skirtGeom(S) : null;
+  if (!g || !g.flat) return null;
+  const z0 = P.collarH + P.skirtPlateT, zc = Math.min(z0 + c, g.zs[g.zs.length - 1] - 4);
+  if (zc - z0 < 0.5) return null;
+  const N = g.N, h = zc - z0, v = new Float32Array(N * 3 * 3), t = [];
+  for (let j = 0; j < N; j++) {
+    const a = TAU * j / N, ca = Math.cos(a), sa = Math.sin(a), r0 = g.outer(z0, j) - g.wS, r1 = g.outer(zc, j) - g.wS;
+    const pts = [[r0 - h, z0 - 0.01], [r0 + 0.3, z0 - 0.01], [r1 + 0.3, zc]];
+    pts.forEach(([r, z], q) => { const k = (j * 3 + q) * 3; v[k] = r * ca; v[k + 1] = r * sa; v[k + 2] = z; });
+  }
+  for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N;
+    for (let q = 0; q < 3; q++) {
+      const q1 = (q + 1) % 3, a = j * 3 + q, b = j * 3 + q1, cc = j1 * 3 + q1, d = j1 * 3 + q;
+      t.push(a, b, cc, a, cc, d);
+    }
+  }
+  let idx = new Uint32Array(t);
+  if (meshVolume(v, idx) < 0) for (let i = 0; i < idx.length; i += 3) { const x = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = x; }
+  return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: idx })));
 }
 // Flat joint: the ribs stand under the plate instead, from the bed up, between the neck clearance and the shell, so
 // they hold the plate up while it prints and stiffen the skirt.
@@ -899,7 +927,7 @@ function shadeConnector(S, seg, overlap = 0.4) {
     const dif = diffuserOn() ? diffuserSolid(S, seg) : null;
     if (dif && !dif.isEmpty()) list.push(dif);
     const sk = skirtOn() ? skirtSolid(S) : null;
-    if (sk) { list.push(sk, ...skirtRibs(S)); const pl = skirtPlate(S); if (pl) list.push(pl); }
+    if (sk) { list.push(sk, ...skirtRibs(S)); const pl = skirtPlate(S); if (pl) list.push(pl); const ch = skirtChamfer(S); if (ch) list.push(ch); }
     return uni(list);
   }
   return null;
@@ -1954,7 +1982,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
   slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
-  segmented(p, 'Under the slot', 'slotStyle', { straight: 'Straight (low base)', funnel: 'Finger funnel' }, slotOn);
+  segmented(p, 'Under the slot', 'slotStyle', { funnel: 'Finger funnel', straight: 'Straight (low base)' }, slotOn);
   slider(p, 'Puck Ø', 'slotD', 15, 80, 0.5, 'mm', slotOn);
   slider(p, 'Puck thickness', 'slotH', 2, 20, 0.1, 'mm', slotOn);
   slider(p, 'Slot width', 'slotW', 3, 20, 0.1, 'mm', slotOn);
@@ -1967,7 +1995,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
   toggleRow(p, 'Diffuser', 'diffuser', difOn);
   note(p, 'A thin layer printed inside the shade just above the puck that softens the bright LED dots. <b>Cone</b> slopes at your overhang limit, so it prints with the shade without supports. <b>Flat</b> sits level over the puck but needs supports under its middle; the 45° rim chamfer joins it to the wall and shortens the span. Thinner lets more light through; a vent hole lets heat out.', difOn);
-  segmented(p, 'Diffuser shape', 'diffStyle', { cone: 'Cone (no supports)', flat: 'Flat (supports)' }, difSet);
+  segmented(p, 'Diffuser shape', 'diffStyle', { flat: 'Flat (supports)', cone: 'Cone (no supports)' }, difSet);
   slider(p, 'Diffuser thickness', 'diffT', 0.4, 2, 0.1, 'mm', difSet);
   slider(p, 'Gap above puck', 'diffGap', 1, 40, 0.5, 'mm', difSet);
   slider(p, 'Rim chamfer', 'diffChamfer', 0, 15, 0.5, 'mm', () => difSet() && P.diffStyle === 'flat');
@@ -2007,9 +2035,11 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
   note(p, 'A small 45° bevel on the bottom edge cancels “elephant foot” (the first layer squashing outward), so the base sits clean. The bed contact is still almost the full Ø; set 0 for a sharp edge.', () => tableBase() && P.footChamfer > 0);
   toggleRow(p, 'Shade skirt', 'skirt', tableBase);
-  segmented(p, 'Skirt joint', 'skirtJoint', { cone: 'Inner cone', flat: 'Flat plate' }, () => tableBase() && P.skirt);
+  segmented(p, 'Skirt joint', 'skirtJoint', { flat: 'Flat plate', cone: 'Inner cone' }, () => tableBase() && P.skirt);
   note(p, '<b>Inner cone</b>: the shade flares out from the collar inside the skirt; everything prints without supports. <b>Flat plate</b>: no cone — a flat plate runs from the collar top straight out to the skirt, and the skirt itself is the shade’s wall down to it, so the inside is wider and plainer. The plate prints as a bridge from the collar to the skirt; turn on supports if your printer bridges poorly.', () => tableBase() && P.skirt);
   slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtJoint === 'flat');
+  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', () => tableBase() && P.skirt && P.skirtJoint === 'flat');
+  note(p, 'A 45° fillet on top of the plate where it meets the skirt’s wall: stiffer joint, and no sharp inside corner to collect dust. 0 turns it off.', () => tableBase() && P.skirt && P.skirtJoint === 'flat');
   slider(p, 'Skirt ribs', 'skirtRibs', 0, 8, 1, '', () => tableBase() && P.skirt);
   note(p, 'With the inner cone: thin webs in the hollow between the cone and the skirt, so the joint doesn’t flex when you twist the shade by its skirt (their undersides follow the skirt’s 45° roof, no supports). With the flat plate: webs under the plate, from the bed up to it, outside the base neck — they hold the plate up while it prints and stiffen the skirt.', () => tableBase() && P.skirt);
   slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => tableBase() && P.skirt && P.skirtRibs > 0);
@@ -2397,7 +2427,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { skirtPlate, skirtRibs, skirtGeom, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { skirtChamfer, skirtPlate, skirtRibs, skirtGeom, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
