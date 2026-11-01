@@ -289,7 +289,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel',
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffChamfer: 3, coverFit: 0.1,
@@ -545,7 +545,7 @@ const sub = (a, b) => keep(a.subtract(b));
 const diffuserOn = () => P.mount === 'twist' && P.diffuser && P.orient !== 'pendant' && P.baseType !== 'adapter' && (P.insert === 'puck' || P.insert === 'slot');
 function puckTopZ(B) {   // top of the puck, in shade coordinates (collar bottom = 0)
   const lift = puckLift(B);
-  return B.insert === 'slot' ? slotDims(B).zSeat + P.slotH - B.f : lift;
+  return B.insert === 'slot' ? slotDims(B).zSeat + underGap() + P.slotH - B.f : lift;
 }
 function diffuserGeom(S) {
   const B = baseDims(), N = S.N, NM = N * S.M, Rci = P.collarD / 2;
@@ -633,8 +633,8 @@ function baseDims() {
     // Minimum height = twist-lock socket depth + whatever the light source needs underneath it.
     let need;
     if (insert === 'puck') need = [['puck pocket', P.puckH], ['cable channel', P.cableW + 2]];
-    else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', P.seatDepth], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + P.fingerRoom - P.slotW / 2], ['clearance', 3]];
-    else if (insert === 'slot') need = [['seat', P.seatDepth], ['cable channel', P.cableW + 1.5]];
+    else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', seatTotal()], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + P.fingerRoom - P.slotW / 2], ['clearance', 3]];
+    else if (insert === 'slot') need = [['seat', seatTotal()], ['cable channel', P.cableW + 1.5]];
     else need = [['socket plate', P.plateT], ['holder cavity', 24]];
     if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT + (insert === 'socket' || P.slotStyle === 'funnel' ? 2.6 : 0)]);
     need.unshift(['twist-lock socket', boreDepth]);
@@ -716,10 +716,45 @@ function applyConstraints() {
 const coverActive = B => !B.adapter && P.cover && B.insert !== 'puck';
 const puckLift = B => !B.adapter && (B.insert === 'puck' || B.insert === 'slot') ? P.puckLift : 0;
 const riserR = B => B.Ri - B.c - 0.2;   // fills the collar bore with 0.5 mm of play, so the shade still drops on and twists
+// Gap under a slot-in puck: it sits on tape strips or printed raiser ribs instead of flat on the seat, so air can pass
+// under it. The seat is cut that much deeper, so the puck still ends up flush.
+const underGap = () => P.insert === 'slot' && P.underPuck !== 'flat' ? P.underGap : 0;
+const seatTotal = () => P.seatDepth + underGap();
 function slotDims(B) {
   // the funnel and its floor stay at the bottom; a puck lift only raises the seat (the slot runs up through the riser)
-  const cavR = P.slotD / 2 + B.c + P.fingerRoom, zPlateBot = B.f - P.seatDepth - P.slotPlateT, zSeat = B.f - P.seatDepth + puckLift(B);
+  const cavR = P.slotD / 2 + B.c + P.fingerRoom, zPlateBot = B.f - seatTotal() - P.slotPlateT, zSeat = B.f - seatTotal() + puckLift(B);
   return { cavR, zSeat, zPlateBot, zFunnel: zPlateBot - (cavR - P.slotW / 2) };
+}
+
+// Side intake holes for the finger funnel: drilled up and inward from low on the outside wall into the open space
+// under the floor, so you can't see through them from the side. Air comes in here, passes under the puck (tape or
+// raiser gap) and rises past its edge into the shade. They sit between the cable channel (along +X) and each other.
+const intakeOn = () => P.intake && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && P.insert === 'slot' && P.slotStyle === 'funnel';
+function intakeGeom(B) {
+  const s = slotDims(B), hr = P.intakeD / 2, H = B.H, Rout = z => B.Rb + (B.Rt - B.Rb) * z / H;
+  const ze = Math.max(P.footChamfer + hr + 1.2, 2.5), Re = Rout(ze), hw = P.slotW / 2;
+  const zLo = (coverActive(B) ? coverLock(B).zv : 0) + hr * 1.3 + 1;   // clear of the cover and its lock grooves
+  const rLo = coverActive(B) ? coverLock(B).gv : s.cavR;
+  // steepest slope (up to 40°) whose hole still breaks into the open funnel: through the straight wall below zFunnel,
+  // or through the 45° cone (z = zFunnel + cavR - r) before the neck under the floor
+  for (let deg = 40; deg >= 5; deg--) {
+    const t = Math.tan(deg * DEG), lift = hr / Math.cos(deg * DEG), z = r => ze + (Re - r) * t;
+    if (z(rLo) - lift < zLo) continue;
+    let rIn;
+    if (z(s.cavR) + lift <= s.zFunnel) rIn = s.cavR;
+    else { rIn = (s.zFunnel + s.cavR - ze - Re * t - lift) / (1 - t); if (rIn > s.cavR || rIn < hw + hr + 2) continue; }
+    return { s, hr, ze, th: deg * DEG, rEnd: rIn - 1.5, Rout };
+  }
+  return null;
+}
+function intakeHoles(B) {
+  if (!intakeOn()) return [];
+  const g = intakeGeom(B), out = [], n = P.intakeN;
+  if (!g) return out;
+  const r0 = g.Rout(g.ze) + 3, r1 = g.rEnd, z0 = g.ze - 3 * Math.tan(g.th), len = (r0 - r1) / Math.cos(g.th);
+  const beta = -(90 - g.th / DEG);   // tilt +Z towards -X, rising at th
+  for (let i = 0; i < n; i++) out.push(rotZ(tr(rot(cyl(len, g.hr, g.hr, 24), [0, beta, 0]), r0, 0, z0), 360 / n * (i + 0.5)));
+  return out;
 }
 
 // Bottom cover: a plug that clicks into the bottom opening (the puck slot, the funnel or the holder cavity) once the
@@ -813,7 +848,8 @@ function buildBase(seg) {
     // Puck seat with a slot under it: push the puck up edgewise through the slot, turn it flat, it rests around the slot.
     // 'straight' runs the slot down to the bottom (lowest base); 'funnel' adds a 45° funnel below a thin floor for finger room.
     const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2;
-    ins.push(tr(cyl(P.seatDepth + 0.01, hx, hx, seg), 0, 0, s.zSeat));
+    ins.push(tr(cyl(seatTotal() + 0.01, hx, hx, seg), 0, 0, s.zSeat));
+    if (underGap() > 0) for (const sg of [-1, 1]) ins.push(tr(cyl(seatTotal() + 0.02, 1.8, 1.8, 24), sg * (hx + 0.6), 0, s.zSeat));   // air notches up past the puck's edge
     if (P.slotStyle !== 'funnel') { ins.push(tr(box(2 * hx, P.slotW, s.zSeat + 1.01), -hx, -hw, -1)); }
     else {
     ins.push(tr(box(2 * hx, P.slotW, s.zSeat - s.zPlateBot + 0.02), -hx, -hw, s.zPlateBot - 0.01));
@@ -843,8 +879,15 @@ function buildBase(seg) {
       ins.push(keep(W.Manifold.hull([...chan(X - 3, 3.5, P.coverT), ...chan(X + 0.5 + P.coverT, 0.01, 0)])));
     }
   }
+  ins.push(...intakeHoles(B));
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
   result = sub(result, uni(ins));
+  if (B.insert === 'slot' && P.underPuck === 'ribs') {
+    // raiser ribs on the two ledges beside the slot, parallel to it, so the puck still goes in edgewise and turns flat
+    const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2, yc = (hw + hx) / 2, w = 2, h = underGap();
+    const L = 2 * Math.sqrt(Math.max(0, (hx - 1) ** 2 - (yc + w / 2) ** 2));
+    if (L > 4) result = keep(result.add(uni([-1, 1].map(sg => tr(box(L, w, h + 0.01), -L / 2, sg * yc - w / 2, s.zSeat - 0.01)))));
+  }
   if (coverActive(B)) { const bumps = coverBumps(B); if (bumps.length) result = keep(result.add(uni(bumps))); }
   if (!B.adapter && P.cableGrip) {
     // Snap-in beads along the open bottom of the cable channel: round on top so the cable clicks past and pulls out
@@ -911,6 +954,7 @@ const capShadeMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xe8893a, s
 const capBaseMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x9c6b45, side: THREE.BackSide });
 const capHwMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0x7d93ad, side: THREE.BackSide });
 const capGlowMat = new THREE.MeshBasicMaterial({ ...capOpts, color: 0xf3e2c4, side: THREE.BackSide });
+const tapeMat = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
@@ -1021,15 +1065,19 @@ function update() {
     ghostGroup.add(zCyl(P.puckD / 2 - 6, P.puckD / 2 - 6, 2, zt - 2, glowMat));
     lightZ = zt + 30;
   } else if (twist && B.insert === 'slot') {
-    const z = slotDims(B).zSeat, r = P.slotD / 2;
+    const z = slotDims(B).zSeat + underGap(), r = P.slotD / 2;
     ghostGroup.add(zCyl(r, r, P.slotH - 1, z));
+    if (P.underPuck === 'tape' && underGap() > 0) {   // tape strips: preview only, never exported
+      const hx = r + B.c, hw = P.slotW / 2, yc = (hw + hx) / 2, w = Math.min(6, hx - hw - 2), L = 2 * Math.sqrt(Math.max(0, (hx - 2) ** 2 - (yc + w / 2) ** 2));
+      for (const sg of [-1, 1]) { const m = new THREE.Mesh(new THREE.BoxGeometry(L, w, underGap()), tapeMat); m.position.set(0, sg * yc, z - underGap() / 2); ghostGroup.add(m); }
+    }
     ghostGroup.add(zCyl(r - 4, r - 4, 1, z + P.slotH - 1, glowMat));
     const z0 = coverActive(B) ? P.coverT : 0;
     ghostGroup.add(zCyl(1.6, 1.6, z + 1 - z0, z0 - 1));
     lightZ = z + 30;
   }
   // hardware stand-ins are closed shapes too: give them solid cut faces in the cutaway (caps ride along as children)
-  for (const m of [...ghostGroup.children]) if (m.isMesh) addCap(m, m.geometry, m.material === glowMat ? capGlowMat : capHwMat);
+  for (const m of [...ghostGroup.children]) if (m.isMesh) addCap(m, m.geometry, m.material === glowMat || m.material === tapeMat ? capGlowMat : capHwMat);
   bulbLight.position.set(0, 0, lightZ ?? S.zEnd / 2);
   applyLight();
 
@@ -1069,6 +1117,11 @@ function update() {
       const rr = riserR(B); let clash = false;
       for (let i = 0; i < S.M; i++) if (S.rowZ[i] <= lift + 0.5 && S.rowMinIn[i] < rr + B.c) clash = true;
       checks.push([!clash, clash ? `The ${fmt(lift)} mm puck riser would touch the shade’s inner wall — lower it or widen the shade near the collar` : `Puck raised ${fmt(lift)} mm on a riser inside the collar`]);
+    }
+    if (intakeOn()) {
+      const g = intakeGeom(B);
+      checks.push(g ? [true, `${P.intakeN} side air intakes Ø${fmt(P.intakeD)}, rising ${(g.th / DEG).toFixed(0)}° into the funnel`] : [false, 'No room for the side air intakes — try a smaller hole Ø or a taller base']);
+      if (!underGap()) checks.push([false, 'The puck lies flat over the slot, so intake air can’t get past it — set Under the puck to tape strips or raiser ribs']);
     }
     if (diffuserOn()) {
       const g = diffuserGeom(S), ok = g.zTop <= S.zEnd - 2;
@@ -1364,7 +1417,7 @@ function toggleRow(parent, label, key, when) {
 }
 // Light-source presets: a named set of the puck, slot, diffuser, cable and cover settings. Built-ins ship with the
 // app; custom ones are saved in this browser. Choosing one applies just those settings, the shade is untouched.
-const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'puckLift',
+const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
   'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
 const BUILTIN_PRESETS = {
   '3mm LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32.5, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.3, puckLift: 7.5,
@@ -1525,6 +1578,13 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
   slider(p, 'Finger room', 'fingerRoom', 0, 15, 0.5, 'mm', () => slotOn() && P.slotStyle === 'funnel');
   note(p, 'How far the funnel’s opening reaches past the puck’s edge, so your fingertips can get around it. The funnel narrows at 45° from that opening up to the slot, so every 1 mm less room makes the funnel — and the minimum base height — 1 mm lower. With a bottom cover, the cover gets smaller too.', () => slotOn() && P.slotStyle === 'funnel');
+  segmented(p, 'Under the puck', 'underPuck', { flat: 'Flat', tape: 'Tape strips', ribs: 'Raiser ribs' }, slotOn);
+  note(p, 'Lifts the puck off the seat so air can pass under it. <b>Tape strips</b>: two strips of gel tape on the ledges beside the slot (shown in light blue, not exported). <b>Raiser ribs</b>: two printed ribs in the same place. Either way the seat is cut deeper by the gap so the puck stays flush, and two notches at the slot ends let the air rise past its edge.', slotOn);
+  slider(p, 'Gap under puck', 'underGap', 0.6, 4, 0.1, 'mm', () => slotOn() && P.underPuck !== 'flat');
+  toggleRow(p, 'Side air intakes', 'intake', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
+  note(p, 'Holes drilled up and inward from low on the base’s side into the space under the puck, so air gets in even with the base flat on the table and the bottom cover on. They slope upward, so you can’t see through them from the side. Pair them with a gap under the puck and a diffuser vent hole so warm air can flow out the top.', () => slotOn() && P.slotStyle === 'funnel' && tableBase());
+  slider(p, 'Intake holes', 'intakeN', 2, 6, 1, '', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
+  slider(p, 'Intake hole Ø', 'intakeD', 2, 8, 0.5, 'mm', () => slotOn() && P.slotStyle === 'funnel' && tableBase() && P.intake);
   slider(p, 'Lift puck', 'puckLift', 0, 45, 0.5, 'mm', () => puckOn() || slotOn());
   note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
   const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
