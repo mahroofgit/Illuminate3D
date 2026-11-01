@@ -628,6 +628,8 @@ const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0, s
 // Cutaway caps: every part is a closed solid, so the back faces seen through the cut plane are its inside.
 const capShadeMat = new THREE.MeshBasicMaterial({ color: 0xe8893a, side: THREE.BackSide });
 const capBaseMat = new THREE.MeshBasicMaterial({ color: 0x9c6b45, side: THREE.BackSide });
+const capHwMat = new THREE.MeshBasicMaterial({ color: 0x7d93ad, side: THREE.BackSide });
+const capGlowMat = new THREE.MeshBasicMaterial({ color: 0xf3e2c4, side: THREE.BackSide });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: 0, transparent: true, opacity: 0.55, depthWrite: false });
 
@@ -725,6 +727,8 @@ function update() {
     ghostGroup.add(zCyl(1.6, 1.6, z + 1, -1));
     lightZ = z + 30;
   }
+  // hardware stand-ins are closed shapes too: give them solid cut faces in the cutaway (caps ride along as children)
+  if (view3.cut) for (const m of [...ghostGroup.children]) if (m.isMesh) m.add(new THREE.Mesh(m.geometry, m.material === glowMat ? capGlowMat : capHwMat));
   bulbLight.position.set(0, 0, lightZ ?? S.zEnd / 2);
   applyLight();
 
