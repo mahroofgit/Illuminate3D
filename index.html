@@ -105,7 +105,7 @@ footer { border-top: 1px solid var(--line); padding: 10px 16px 14px; }
 #checks li { display: flex; gap: 6px; padding: 2px 0; }
 #checks li b { width: 14px; flex: none; }
 #checks li.ok b { color: var(--ok); } #checks li.bad b { color: var(--warn); }
-.exports { display: flex; gap: 8px; } .exports .btn { flex: 1; padding: 9px 8px; }
+.exports { display: flex; flex-wrap: wrap; gap: 8px; } .exports .btn { flex: 1 1 40%; padding: 9px 8px; }
 main { position: relative; background: var(--view); min-width: 0; }
 main canvas { display: block; width: 100%; height: 100%; }
 #toolbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
@@ -160,6 +160,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <div class="exports">
         <button class="btn primary" id="expShade">Export shade STL</button>
         <button class="btn primary" id="expBase">Export base STL</button>
+        <button class="btn primary" id="expCover" hidden>Export cover STL</button>
       </div>
     </footer>
   </aside>
@@ -255,7 +256,7 @@ const DEFAULT = {
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, slotStyle: 'straight',
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -548,6 +549,7 @@ function baseDims() {
     else if (insert === 'slot' && P.slotStyle === 'funnel') need = [['seat', P.seatDepth], ['floor', P.slotPlateT], ['finger funnel', P.slotD / 2 + c + 4 - P.slotW / 2], ['clearance', 3]];
     else if (insert === 'slot') need = [['seat', P.seatDepth], ['cable channel', P.cableW + 1.5]];
     else need = [['socket plate', P.plateT], ['holder cavity', 24]];
+    if (P.cover && insert !== 'puck') need.push(['bottom cover', P.coverT]);
     need.unshift(['twist-lock socket', boreDepth]);
     minH = need.reduce((a, [, v]) => a + v, 0);
     minParts = need.map(([k, v]) => `${k} ${+v.toFixed(1)}`).join(' + ');
@@ -572,6 +574,7 @@ const fmt = v => +(+v).toFixed(1);
 const LIMITS = {
   collarWall: () => [Math.max(1.6, P.wall), 5, `the collar should be at least as thick as the shade wall (${fmt(P.wall)} mm) so the joint isn't the weak point.`],
   cableW: () => [P.cableD + (P.cableGrip && baseInsert() !== 'socket' ? 1.6 : 0.5), 12, P.cableGrip ? `the cable (${fmt(P.cableD)} mm) has to fit above the snap-in lips.` : `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
+  puckLift: () => [0, P.collarH + 15, `the riser can stand at most 15 mm above the collar top before it reaches into the shade’s flare.`],
   seatDepth: () => [P.slotH, Math.max(8, P.slotH + 4), `the seat must be at least as deep as the puck is thick (${fmt(P.slotH)} mm) so it sits flush.`],
   slotW: () => [P.slotH + 2 * P.clearance, 20, `the slot must be wider than the puck thickness plus clearance so the puck fits through on its edge.`],
   collarH: () => [P.lugH + P.lugDepth + 3, 30, `the collar needs room for the ${fmt(P.lugH)} mm lug and the 45° chamfer above it.`],
@@ -588,7 +591,7 @@ const LIMITS = {
     const B = baseDims(), lean = B.Rt - B.H * Math.tan(P.overhang * DEG), wall = baseFeatureR(B) + 2.4;
     // the side is a straight taper, so it must also still be ≥ groove radius + 3 mm at the twist-lock floor height
     const t = B.f / B.H, need = B.gr1 + 3, groove = t < 1 ? (need - B.Rt * t) / (1 - t) : need;
-    const lo = Math.max(lean, wall, groove, 20);
+    const lo = Math.max(lean, wall + (coverActive(B) ? 1 : 0), groove, 20);
     const why = lo === lean ? `a narrower bottom would make the side lean out past your ${P.overhang}° overhang limit.`
       : lo === groove ? `the tapered side has to stay 3 mm thick around the twist-lock grooves near the floor.`
       : `the bottom keeps a wall around the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} inside.`;
@@ -615,9 +618,44 @@ function applyConstraints() {
   return changed;
 }
 
+const coverActive = B => !B.adapter && P.cover && B.insert !== 'puck';
+const puckLift = B => !B.adapter && (B.insert === 'puck' || B.insert === 'slot') ? P.puckLift : 0;
+const riserR = B => B.Ri - B.c - 0.2;   // fills the collar bore with 0.5 mm of play, so the shade still drops on and twists
 function slotDims(B) {
-  const cavR = P.slotD / 2 + B.c + 4, zSeat = B.f - P.seatDepth, zPlateBot = zSeat - P.slotPlateT;
+  // the funnel and its floor stay at the bottom; a puck lift only raises the seat (the slot runs up through the riser)
+  const cavR = P.slotD / 2 + B.c + 4, zPlateBot = B.f - P.seatDepth - P.slotPlateT, zSeat = B.f - P.seatDepth + puckLift(B);
   return { cavR, zSeat, zPlateBot, zFunnel: zPlateBot - (cavR - P.slotW / 2) };
+}
+
+// Bottom cover: a plug that clicks into the bottom opening (the puck slot, the funnel or the holder cavity) once the
+// puck and cable are in. Short 45° ridges on the plug snap into a V-groove in the opening wall; the cable runs over
+// the plug and out through the channel. A fingernail notch at the far end lets you pop it out again.
+function coverShape(B) {
+  if (B.insert === 'slot' && P.slotStyle !== 'funnel') return { rect: true, hx: P.slotD / 2 + B.c, hw: P.slotW / 2 };
+  return { rect: false, R: B.insert === 'slot' ? slotDims(B).cavR : P.socketD / 2 };
+}
+const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (height h) in the plane y0, apex at y1
+  keep(W.Manifold.hull([tr(box(len, 0.02, h), x, y0 - 0.01, zc - h / 2), tr(box(len, 0.01, 0.01), x, y1 - 0.005, zc - 0.005)]));
+function coverCuts(B, seg) {
+  const k = coverShape(B), gz = P.coverT / 2, out = [];
+  if (k.rect) for (const sg of [-1, 1]) out.push(prism(-k.hx, 2 * k.hx, sg * k.hw, sg * (k.hw + 0.5), gz, 1.1));
+  else out.push(revolve([[k.R - 0.3, gz - 0.85], [k.R + 0.5, gz], [k.R - 0.3, gz + 0.85]], 360, seg));
+  const X = k.rect ? k.hx : k.R;
+  out.push(tr(box(2.8, 5, P.coverT * 0.6 + 1), -X - 2.5, -2.5, -1));
+  return out;
+}
+function buildCover(seg) {
+  const B = baseDims(), k = coverShape(B), c = B.c, T = P.coverT, gz = T / 2, list = [];
+  if (k.rect) {
+    const hx = k.hx - c, hw = k.hw - c, L = Math.min(8, hx * 0.6);
+    list.push(tr(box(2 * hx, 2 * hw, T), -hx, -hw, 0));
+    for (const sg of [-1, 1]) for (const xc of [-hx / 2, hx / 2]) list.push(prism(xc - L / 2, L, sg * hw, sg * (hw + 0.35), gz, 0.8));
+  } else {
+    const Rc = k.R - c;
+    list.push(cyl(T, Rc, Rc, seg));
+    for (let i = 0; i < 4; i++) list.push(rotZ(revolve([[Rc - 0.3, gz - 0.7], [Rc + 0.35, gz], [Rc - 0.3, gz + 0.7]], 24, seg), 45 + 90 * i - 12));
+  }
+  return uni(list);
 }
 
 function buildBase(seg) {
@@ -633,35 +671,43 @@ function buildBase(seg) {
     cut.push(rotZ(revolve(vPoly, P.lugW + 2 * ca, seg), c - P.lugW / 2 - ca));
     cut.push(rotZ(revolve(hPoly, P.lugW + P.turn + 2 * ca, seg), c - P.lugW / 2 - P.turn - ca));
   }
+  const lift = puckLift(B), ins = [];   // ins: light-source and cable cuts, applied after the riser is added
+  let result = sub(body, uni(cut));
+  if (lift > 0) { const rr = riserR(B); result = keep(result.add(tr(cyl(lift + 0.01, rr, rr, seg), 0, 0, f - 0.01))); }
   if (B.insert === 'puck') {
-    const pr = P.puckD / 2 + B.c;
-    cut.push(tr(cyl(P.puckH + 0.01, pr, pr, seg), 0, 0, f - P.puckH));
-    cut.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, f - P.puckH));
-    cut.push(tr(cyl(f - P.puckH + 1.2, P.cableW / 2, P.cableW / 2, 32), 0, 0, -1));
+    const pr = P.puckD / 2 + B.c, zP = f + lift - P.puckH;
+    ins.push(tr(cyl(P.puckH + 0.01, pr, pr, seg), 0, 0, zP));
+    ins.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, zP));
+    ins.push(tr(cyl(zP + 1.2, P.cableW / 2, P.cableW / 2, 32), 0, 0, -1));
   } else if (B.insert === 'slot') {
     // Puck seat with a slot under it: push the puck up edgewise through the slot, turn it flat, it rests around the slot.
     // 'straight' runs the slot down to the bottom (lowest base); 'funnel' adds a 45° funnel below a thin floor for finger room.
     const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2;
-    cut.push(tr(cyl(P.seatDepth + 0.01, hx, hx, seg), 0, 0, s.zSeat));
-    if (P.slotStyle !== 'funnel') { cut.push(tr(box(2 * hx, P.slotW, s.zSeat + 1.01), -hx, -hw, -1)); }
+    ins.push(tr(cyl(P.seatDepth + 0.01, hx, hx, seg), 0, 0, s.zSeat));
+    if (P.slotStyle !== 'funnel') { ins.push(tr(box(2 * hx, P.slotW, s.zSeat + 1.01), -hx, -hw, -1)); }
     else {
-    cut.push(tr(box(2 * hx, P.slotW, P.slotPlateT + 0.02), -hx, -hw, s.zPlateBot - 0.01));
+    ins.push(tr(box(2 * hx, P.slotW, s.zSeat - s.zPlateBot + 0.02), -hx, -hw, s.zPlateBot - 0.01));
     const ring = tr(cyl(0.01, s.cavR, s.cavR, seg), 0, 0, s.zFunnel);
     const neck = tr(box(2 * hx, P.slotW, 0.01), -hx, -hw, s.zPlateBot - 0.01);
-    cut.push(keep(W.Manifold.hull([ring, neck])));
-    cut.push(tr(cyl(s.zFunnel + 1.01, s.cavR, s.cavR, seg), 0, 0, -1));
+    ins.push(keep(W.Manifold.hull([ring, neck])));
+    ins.push(tr(cyl(s.zFunnel + 1.01, s.cavR, s.cavR, seg), 0, 0, -1));
     }
   } else {
     const hr = P.holeD / 2;
-    cut.push(tr(cyl(P.plateT + 2, hr, hr, seg), 0, 0, f - P.plateT - 1));
+    ins.push(tr(cyl(P.plateT + 2, hr, hr, seg), 0, 0, f - P.plateT - 1));
     if (!B.adapter) {
       const cr = P.socketD / 2, top = f - P.plateT, coneH = Math.max(0, cr - hr);
-      cut.push(tr(cyl(top - coneH + 1, cr, cr, seg), 0, 0, -1));
-      if (coneH > 0) cut.push(tr(cyl(coneH + 0.01, cr, hr, seg), 0, 0, top - coneH));
+      ins.push(tr(cyl(top - coneH + 1, cr, cr, seg), 0, 0, -1));
+      if (coneH > 0) ins.push(tr(cyl(coneH + 0.01, cr, hr, seg), 0, 0, top - coneH));
     }
   }
-  if (!B.adapter) cut.push(tr(box(B.Rb + 2, P.cableW, P.cableW), 0, -P.cableW / 2, -0.01));
-  let result = sub(body, uni(cut));
+  if (!B.adapter) {
+    // cable channel with an arched roof (prints without support)
+    const hw = P.cableW / 2;
+    ins.push(keep(W.Manifold.hull([tr(box(B.Rb + 2, P.cableW, Math.max(0.02, P.cableW - hw)), 0, -hw, -0.01), tr(rot(cyl(B.Rb + 2, hw, hw, 32), [0, 90, 0]), 0, 0, P.cableW - hw)])));
+  }
+  if (coverActive(B)) ins.push(...coverCuts(B, seg));
+  result = sub(result, uni(ins));
   if (!B.adapter && P.cableGrip) {
     // Snap-in beads along the open bottom of the cable channel: round on top so the cable clicks past and pulls out
     // easily, with a 45° underside down to the bed so they print without support. Placed in whatever run of channel
@@ -799,6 +845,10 @@ function update() {
     const c = shadeConnector(S, 96, 0);
     if (c) { addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat); connVol = c.volume(); }
     if (P.mount === 'twist') { const b = buildBase(96); addSolid(baseGroup, manifoldToGeo(b), baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox(); }
+    if (P.mount === 'twist' && coverActive(B)) {
+      const g = new THREE.Group(); addSolid(g, manifoldToGeo(buildCover(96)), baseMat, capBaseMat);
+      g.position.z = view3.explode ? -30 : 0; baseGroup.add(g);
+    }
   });
 
   // place parts (assembly coords: base print frame, Z up)
@@ -820,14 +870,16 @@ function update() {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(fit.bulbR, 40, 24), glowMat); bulb.position.z = z0 + fit.bulbZ; ghostGroup.add(bulb);
     lightZ = z0 + fit.bulbZ;
   } else if (twist && B.insert === 'puck') {
-    ghostGroup.add(zCyl(P.puckD / 2, P.puckD / 2, P.puckH - 2, B.f - P.puckH));
-    ghostGroup.add(zCyl(P.puckD / 2 - 6, P.puckD / 2 - 6, 2, B.f - 2, glowMat));
-    lightZ = B.f + 30;
+    const zt = B.f + puckLift(B);
+    ghostGroup.add(zCyl(P.puckD / 2, P.puckD / 2, P.puckH - 2, zt - P.puckH));
+    ghostGroup.add(zCyl(P.puckD / 2 - 6, P.puckD / 2 - 6, 2, zt - 2, glowMat));
+    lightZ = zt + 30;
   } else if (twist && B.insert === 'slot') {
-    const z = B.f - P.seatDepth, r = P.slotD / 2;
+    const z = slotDims(B).zSeat, r = P.slotD / 2;
     ghostGroup.add(zCyl(r, r, P.slotH - 1, z));
     ghostGroup.add(zCyl(r - 4, r - 4, 1, z + P.slotH - 1, glowMat));
-    ghostGroup.add(zCyl(1.6, 1.6, z + 1, -1));
+    const z0 = coverActive(B) ? P.coverT : 0;
+    ghostGroup.add(zCyl(1.6, 1.6, z + 1 - z0, z0 - 1));
     lightZ = z + 30;
   }
   // hardware stand-ins are closed shapes too: give them solid cut faces in the cutaway (caps ride along as children)
@@ -861,6 +913,12 @@ function update() {
       const okH = P.holeD < P.collarD - 4;
       checks.push([okH, okH ? `Socket Ø${P.holeD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too small for the Ø${P.holeD} socket`]);
     }
+    const lift = puckLift(B);
+    if (lift > 0) {
+      const rr = riserR(B); let clash = false;
+      for (let i = 0; i < S.M; i++) if (S.rowZ[i] <= lift + 0.5 && S.rowMinIn[i] < rr + B.c) clash = true;
+      checks.push([!clash, clash ? `The ${fmt(lift)} mm puck riser would touch the shade’s inner wall — lower it or widen the shade near the collar` : `Puck raised ${fmt(lift)} mm on a riser inside the collar`]);
+    }
     if (P.turn < P.lugW * 0.6) checks.push([false, 'Turn angle is small for the lug width — the lock may slip']);
   }
   if (lightZ !== null && (P.mount === 'ring' || (twist && B.insert === 'socket'))) {
@@ -877,6 +935,7 @@ function update() {
   if (baseBox) parts.push(`${B.adapter ? 'Adapter' : 'Base'} Ø${(2 * Math.max(B.Rt, B.Rb)).toFixed(0)} × ${B.H.toFixed(0)} mm · ≈${(baseVol / 1000 * dens).toFixed(0)} g`);
   document.getElementById('dims').innerHTML = parts.join('<br>');
   document.getElementById('expBase').hidden = !twist;
+  document.getElementById('expCover').hidden = !(twist && coverActive(B));
   document.getElementById('expBase').textContent = B.adapter ? 'Export adapter STL' : 'Export base STL';
   document.getElementById('tbExplode').hidden = !twist;
   document.getElementById('tbBase').hidden = !twist;
@@ -1202,6 +1261,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Slot width', 'slotW', 3, 20, 0.1, 'mm', slotOn);
   slider(p, 'Seat depth', 'seatDepth', 0.6, 8, 0.1, 'mm', slotOn);
   slider(p, 'Floor thickness', 'slotPlateT', 1.2, 5, 0.1, 'mm', () => slotOn() && P.slotStyle === 'funnel');
+  slider(p, 'Lift puck', 'puckLift', 0, 45, 0.5, 'mm', () => puckOn() || slotOn());
+  note(p, 'Raises the puck on a riser that stands inside the shade’s collar, so its light clears the collar wall and reaches the shade. Set it to the collar height to put the puck level with the top of the collar. The shade still drops over the riser and twists to lock.', () => (puckOn() || slotOn()) && P.puckLift > 0);
   select(p, 'Holder fitting', 'fitting', Object.fromEntries(Object.entries(FITTINGS).map(([k, v]) => [k, v.label])), holderOn);
   slider(p, 'Hole Ø', 'holeD', 8, 60, 0.1, 'mm', holderOn);
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
@@ -1211,6 +1272,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
   toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
   note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
+  toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
+  slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
+  note(p, 'A separate plug (export it with “Export cover STL”) that clicks into the opening under the base once the puck and cable are in. The cable runs over it and out through the channel; pry it out with a fingernail at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
@@ -1459,17 +1523,18 @@ async function runExport(which) {
         const body = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
         const conn = shadeConnector(S, q.seg);
         man = conn ? keep(body.add(conn)) : body;
-      } else man = buildBase(q.seg);
+      } else man = which === 'cover' ? buildCover(q.seg) : buildBase(q.seg);
       if (man.status() !== 'NoError' || man.isEmpty()) throw new Error('Mesh error: ' + man.status());
       return stlBlob(man.getMesh());
     });
     const B = baseDims();
-    download(blob, which === 'shade' ? 'lamp-shade.stl' : (B.adapter ? 'lamp-adapter.stl' : 'lamp-base.stl'));
+    download(blob, which === 'shade' ? 'lamp-shade.stl' : which === 'cover' ? 'lamp-cover.stl' : (B.adapter ? 'lamp-adapter.stl' : 'lamp-base.stl'));
   } catch (e) { console.error(e); alert('Export failed: ' + e.message + '\nTry reducing pattern depth or increasing wall thickness.'); }
   busy.classList.remove('on');
 }
 document.getElementById('expShade').onclick = () => runExport('shade');
 document.getElementById('expBase').onclick = () => runExport('base');
+document.getElementById('expCover').onclick = () => runExport('cover');
 
 // ---------------------------------------------------------------- boot
 refreshAll();
@@ -1479,7 +1544,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { buildCover, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
