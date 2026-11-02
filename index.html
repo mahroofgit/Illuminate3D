@@ -537,13 +537,14 @@ function buildShade(N, layer) {
   const cosA = new Float64Array(N), sinA = new Float64Array(N), ang = new Float64Array(N);
   for (let j = 0; j < N; j++) { ang[j] = TAU * j / N; cosA[j] = Math.cos(ang[j]); sinA[j] = Math.sin(ang[j]); }
 
+  let neckH = 0;   // height of the neck below the body; the connector-end pattern fade counts from its bottom
   function rowBody(zb, O, I) {
     const tP = zb / H, tU = pend ? 1 - tP : tP;
     const base = pr(tU), tw = twAt(tU);
     const t0 = Math.max(0, tU - 0.004), t1 = Math.min(1, tU + 0.004);   // one-sided at the ends, so divide by the real span
     const d = (pr(t1) - pr(t0)) / ((t1 - t0) * H);
     const wh = P.wall * Math.min(2, Math.sqrt(1 + d * d));
-    const fade = smoothstepE(P.fadeConn, zb) * smoothstepE(P.fadeOpen, H - zb);
+    const fade = smoothstepE(P.fadeConn, zb + neckH) * smoothstepE(P.fadeOpen, H - zb);
     const zU = tU * H;
     for (let j = 0; j < N; j++) {
       const a = ang[j] - tw;
@@ -559,72 +560,101 @@ function buildShade(N, layer) {
   let zStart = 0, transH = 0, Rco = 0, Rci = 0, flare = null;
   if (twistMount) {
     Rco = P.collarD / 2 + P.collarWall; Rci = P.collarD / 2;
-    let md = 0;
-    for (let j = 0; j < N; j++) md = Math.max(md, Math.abs(o0[j] - Rco), Math.abs(i0[j] - Rci));
-    transH = Math.max(2, md / Math.tan(lim));
     zStart = P.collarH;
-    flare = makeFlare();
+    flare = makeNeck();
     transH = flare.transH;
   }
 
-  // Flare from the collar up to the body. It continues the body's own surface downward (profile slope, twist and
-  // pattern carried on below its first row), and eases that into the round collar:
-  //   outer = mean radius on a cubic that leaves the collar vertically and meets the body at the body's own slope
-  //         + the body's shape around that mean, faded in by g(s) (zero at the collar, full at the body, flat at both ends)
-  // so the surface has no kink at either end and lobes and ribs keep turning instead of dropping straight down.
-  // "Shape the flare" holds the shape at full size for longer before it rounds off. The flare is made as tall as it
-  // needs to stay within the overhang limit.
-  function makeFlare() {
-    const tU0 = pend ? 1 : 0, dz = 0.5, tUz = zz => pend ? 1 - zz / H : zz / H;
-    const b0 = pr(tU0), bS = (pr(tUz(dz)) - b0) / dz, w0 = twAt(tU0), wS = (twAt(tUz(dz)) - w0) / dz;
-    // the body's outer surface extended below its first row (zz < 0) by carrying its slope and twist rate on
-    const ext = (zz, out) => {
-      const tU = tUz(zz), base = b0 + bS * zz, tw = w0 + wS * zz;
-      const fade = smoothstepE(P.fadeConn, zz) * smoothstepE(P.fadeOpen, H - zz);
-      let m = 0;
+  // Neck: the shade's body carried on down to the twist-lock collar. It is the body itself (same cross-section, same
+  // twist rate, same pattern); only its outline narrows. The outline radius follows a quintic from the collar size up
+  // to the profile's bottom, matching the profile's radius, slope and curvature there, so the joint shows no crease
+  // or highlight line. It is as tall as the overhang limit needs. A short band right on the collar then rounds the
+  // cross-section off into the round collar (smootherstep, so that joint is smooth too).
+  function makeNeck() {
+    const tU0 = pend ? 1 : 0, tUz = zz => pend ? 1 - zz / H : zz / H;
+    const e = Math.max(2, 2 * H / n);   // finite-difference step: a couple of profile samples
+    const b0 = pr(tU0), b1 = pr(tUz(e)), b2 = pr(tUz(2 * e));
+    const bS = (-3 * b0 + 4 * b1 - b2) / (2 * e), bSS = (b0 - 2 * b1 + b2) / (e * e);
+    const w0 = twAt(tU0), wS = (twAt(tUz(e)) - w0) / e;
+    let minF = 1e9; for (let k = 0; k < 720; k++) minF = Math.min(minF, shapeF(TAU * k / 720));
+    const tanL = Math.tan(lim);
+    const Rb0 = Rco / minF;   // outline radius at the neck's foot: the cross-section's narrowest points just reach the collar
+    // outline radius along the neck, s = 0 at its foot to 1 where the body starts
+    // it leaves the foot at a moderate slope with no curvature (the neck carries on straight below the foot, into the
+    // rounding band), so the middle needn't be steep to make up for a vertical start
+    const v0 = Math.sign(b0 - Rb0) * tanL * 0.6;
+    const base = (s, h) => {
+      if (s < 0) return Rb0 + v0 * h * s;
+      const s3 = s * s * s, s4 = s3 * s, s5 = s4 * s;
+      return Rb0 * (1 - 10 * s3 + 15 * s4 - 6 * s5) + b0 * (10 * s3 - 15 * s4 + 6 * s5)
+        + v0 * h * (s - 6 * s3 + 8 * s4 - 3 * s5)
+        + bS * h * (-4 * s3 + 7 * s4 - 3 * s5) + bSS * h * h * (s3 - 2 * s4 + s5) / 2;
+    };
+    // one row of the body's surface at height zz below its start (zz <= 0), with outline radius b
+    const surf = (zz, b, out, pat) => {
+      const tU = tUz(zz), tw = w0 + wS * zz;
+      const fade = pat ? smoothstepE(P.fadeConn, zz + neckH) * smoothstepE(P.fadeOpen, H - zz) : 0;
       for (let j = 0; j < N; j++) {
         const a = ang[j] - tw;
-        let r = base * shapeF(a);
-        if (fade > 0) r += fade * patt(a, tU, tU * H, base);
-        out[j] = Math.max(r, P.wall + 2); m += out[j];
+        let r = b * shapeF(a);
+        if (fade > 0) r += fade * patt(a, tU, tU * H, b);
+        out[j] = Math.max(r, P.wall + 2);
       }
-      return m / N;
     };
-    const tmp = new Float64Array(N);
-    const m0 = ext(0, tmp), m1 = (m0 - ext(-dz, tmp)) / dz;   // mean radius and its slope where the body starts
-    const g = P.flareShape ? s => 1 - (1 - s) ** 3 * (1 + 3 * s) : s => s * s * (3 - 2 * s);
-    const outerRow = (s, h, out) => {
-      const mean = ext((s - 1) * h, out), sm = s * s * (3 - 2 * s), h11 = s * s * (s - 1);
-      const mBar = Rco + (m0 - Rco) * sm + m1 * h * h11, k = g(s);
-      for (let j = 0; j < N; j++) out[j] = mBar + (out[j] - mean) * k;
-    };
-    // overhang: outward slope of the outside, inward slope of the inside (thin walls follow the outside closely)
-    const tanL = Math.tan(lim), A = new Float64Array(N), B = new Float64Array(N);
-    let h = transH;
-    for (let it = 0; it < 10; it++) {
-      const K = 40; let worst = 0;
-      outerRow(0, h, A);
+    // neck height for the overhang limit (outline and twisting shape; a steep pattern is the pattern's own matter, as on the body)
+    // steepest true surface tilt over a stretch of rows: the vertical slope, less where the surface also slants
+    // sideways (a lobe sweeping past). Patterns are left out: a steep pattern is the pattern's own matter, as on the body.
+    const A = new Float64Array(N), B = new Float64Array(N);
+    const tilt = (row, z0, z1) => {
+      const K = 48; let worst = 0;
+      row(z0, A);
       for (let k = 1; k <= K; k++) {
-        outerRow(k / K, h, B);
-        for (let j = 0; j < N; j++) worst = Math.max(worst, Math.abs(B[j] - A[j]) * K / h);
+        row(z0 + (z1 - z0) * k / K, B);
+        for (let j = 0; j < N; j++) {
+          const rz = (B[j] - A[j]) * K / (z1 - z0), rt = (B[(j + 1) % N] - B[(j + N - 1) % N]) * N / (2 * TAU * B[j]);
+          worst = Math.max(worst, Math.abs(rz) / Math.sqrt(1 + rt * rt));
+        }
         A.set(B);
       }
-      // a little margin: the mesh check measures face normals, which read a touch steeper than these samples
-      if (worst <= tanL * 0.95 || h > transH * 3) break;
-      h = Math.min(transH * 3, h * worst / (tanL * 0.95) * 1.02);
+      return worst;
+    };
+    const h0 = Math.max(4, Math.abs(b0 - Rb0) / (tanL * 0.9));
+    let h = h0;
+    for (let it = 0; it < 10; it++) {
+      const worst = tilt((zz, out) => surf(zz, base(1 + zz / h, h), out, false), -h, 0);
+      if (worst <= tanL * 0.95 || h >= h0 * 4) break;
+      h = Math.min(h0 * 4, h * worst / (tanL * 0.95) * 1.02);
+    }
+    neckH = h;
+    // rounding band from the collar up to the neck's foot: blends the round collar into the neck carried on below its foot
+    const band = (z, hb, out, pat) => {
+      surf(z - hb - h, base((z - hb) / h, h), out, pat);
+      const u = z / hb, q = u * u * u * (u * (u * 6 - 15) + 10);
+      for (let j = 0; j < N; j++) out[j] = Rco + (out[j] - Rco) * q;
+      return q;
+    };
+    surf(-h, Rb0, A, false);
+    let dev = 0; for (let j = 0; j < N; j++) dev = Math.max(dev, Math.abs(A[j] - Rco));
+    let hb = Math.max(2, 1.875 * dev / (tanL * 0.9));   // 1.875 = steepest slope of the smootherstep
+    for (let it = 0; it < 8; it++) {
+      const worst = tilt((z, out) => band(z, hb, out, false), 0, hb);
+      if (worst <= tanL * 0.95 || hb > 60) break;
+      hb = Math.min(60, hb * worst / (tanL * 0.95) * 1.02);
     }
     const colW = Rco - Rci, prev = new Float64Array(N);
+    const outer = (z, out) => {   // z measured from the collar top
+      if (z >= hb) { const s = (z - hb) / h; surf((s - 1) * h, base(s, h), out, true); return 1; }
+      return band(z, hb, out, true);
+    };
     return {
-      transH: h,
-      row(s, O, I) {
-        outerRow(s, h, O);
-        outerRow(Math.max(0, s - 0.02), h, prev);
-        const b = s * s * (3 - 2 * s);
+      transH: hb + h,
+      row(sAll, O, I) {
+        const z = sAll * (hb + h), dzz = 0.05;
+        const q = outer(z, O); outer(Math.max(0, z - dzz), prev);
         for (let j = 0; j < N; j++) {
-          // wall: collar wall → body wall, thickened where the wall leans so it stays a full wall thick across the slope
-          const k = (O[j] - prev[j]) / (0.02 * h), need = P.wall * Math.min(2, Math.sqrt(1 + k * k));
-          const w0 = colW + (o0[j] - i0[j] - colW) * b;
-          I[j] = Math.max(1, O[j] - (w0 + Math.max(0, need - w0) * 4 * b * (1 - b)));   // exact collar and body walls at the ends
+          // wall: collar wall → body wall, kept a full wall thick across the slope where the wall leans
+          const k = (O[j] - prev[j]) / dzz, need = P.wall * Math.min(2, Math.sqrt(1 + k * k));
+          I[j] = Math.max(1, O[j] - (colW + (need - colW) * q));
         }
       },
     };
@@ -645,7 +675,7 @@ function buildShade(N, layer) {
     let z;
     if (i < nT) {
       const s = i / nT; z = zStart + s * transH;
-      // flare rows (see makeFlare); with a flat skirt joint, one thin row buried mid-wall in the skirt's top instead
+      // neck rows (see makeNeck); with a flat skirt joint, one thin row buried mid-wall in the skirt's top instead
       if (flatJ) for (let j = 0; j < N; j++) { const m = (o0[j] + i0[j]) / 2; O[j] = m + 0.15; I[j] = m - 0.15; }
       else flare.row(s, O, I);
     } else { const zz = (i - nT) / nB * H; z = zb + zz; rowBody(zz, O, I); }
@@ -2112,8 +2142,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Corner rounding', 'round', 0, 1, 0.01, '', () => P.sides >= 3);
   slider(p, 'Twist', 'twist', -360, 360, 1, '°');
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
-  toggleRow(p, 'Shape the flare', 'flareShape', () => P.mount === 'twist' && !skirtOn());
-  note(p, 'The flare is where the shade narrows down to the twist-lock collar. It carries the body’s shape, twist and pattern on down and eases them smoothly into the round collar, with no crease where it meets the body. Off: the shape fades out evenly over the flare. On: it stays at full size for longer and only rounds off near the collar. The flare gets taller if it must to stay within your overhang limit.', () => P.mount === 'twist');
 
   h3(p, 'Shade skirt', tableBase);
   toggleRow(p, 'Add skirt', 'skirt', tableBase);
