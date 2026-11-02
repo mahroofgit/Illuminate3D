@@ -389,10 +389,10 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, shellChamfer: 3, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
-  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
+  baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.25,
   printer: 'b256', material: 'PLA', overhang: 50,
   previewRes: 180, previewLayer: 1, exportQ: 'fine',
   color: '#f2ede4', baseColor: '#3a3a3c',
@@ -838,20 +838,34 @@ function wallAt(S, z, j, inner) {
   const r = ii => { const k = ((inner ? NM : 0) + ii * N + j) * 3; return Math.hypot(S.pos[k], S.pos[k + 1]); };
   return r(i) * (1 - f) + r(i + 1) * f;
 }
-// The inside of the plate bottom: the plate from the collar bore out to the middle of the wall; a 45° chamfer under it
+// The inside of the plate bottom: the plate from the collar bore out into the middle of the wall; a 45° chamfer under it
 // in the corner with the wall (it shortens the plate's bridge and stiffens the joint, kept clear of the base's neck, so
 // it's smaller or left out where the wall hugs the neck); and ribs from the bed up to the plate, between the neck
 // clearance and the wall, that hold the plate up while it prints and stiffen the shade for twisting.
+// Solid filling the middle of the shade's wall (halfway between its outside and inside rows) up to zMax.
+function midWallFill(S, zMax) {
+  const N = S.N, NM = N * S.M;
+  let m = 1; while (m < S.M - 1 && S.rowZ[m] < zMax) m++;
+  const M = m + 1, v = new Float32Array(N * M * 3 + 6);
+  for (let k = 0; k < N * M * 3; k++) v[k] = (S.pos[k] + S.pos[NM * 3 + k]) / 2;
+  v.set([0, 0, S.rowZ[0], 0, 0, S.rowZ[m]], N * M * 3);
+  const BC = N * M, TC = BC + 1, tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
+  const idx = new Uint32Array(tri);
+  if (meshVolume(v, idx) < 0) for (let i = 0; i < idx.length; i += 3) { const x = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = x; }
+  return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: idx })));
+}
 function innerPlate(S, seg) {
   const N = S.N, sd = skirtDims(baseDims()), z0 = P.collarH, T = P.skirtPlateT, Ri = P.collarD / 2, out = [];
-  const oc = [], hole = [];
-  for (let j = 0; j < N; j++) {
-    const a = TAU * j / N, mid = z => (wallAt(S, z, j, false) + wallAt(S, z, j, true)) / 2;
-    const r = Math.min(mid(z0), mid(z0 + T));
-    oc.push([r * Math.cos(a), r * Math.sin(a)]);
-  }
-  for (let j = 0; j < seg; j++) { const a = -TAU * j / seg; hole.push([Ri * Math.cos(a), Ri * Math.sin(a)]); }
-  out.push(tr(extrudeXS([oc, hole], T), 0, 0, z0));
+  // the plate runs out to the middle of the wall at every height through its thickness, so it fuses with the wall
+  // along its whole edge even where the wall leans
+  const big = S.maxR + 5, slab = sub(tr(cyl(T, big, big, seg), 0, 0, z0), tr(cyl(T + 2, Ri, Ri, seg), 0, 0, z0 - 1));
+  out.push(keep(slab.intersect(midWallFill(S, z0 + T + 1))));
   const c = P.skirtChamfer;
   if (c > 0) {
     const v = new Float32Array(N * 3 * 3), t = [];
@@ -1170,16 +1184,18 @@ const prism = (x, len, y0, y1, zc, h) =>   // triangular prism along X: base (he
 // slots in the cavity wall, a twist carries them along a groove, and they rest on the ledge below it behind a small
 // bump. The groove roofs are 45° and the cover exports upside down, so nothing needs supports.
 const coverEdge = B => { const k = coverShape(B); return k.rect ? k.hx : k.R; };   // where the channel leaves the opening
-// The groove roof has play (zt0) for most of the twist, like the collar lock, then a short ramp near the end wedges the
-// lugs' leading ends down onto the ledge (zt1, `coverFit` mm tight) with the cover flush — so it turns freely and only
-// snugs up in the last few degrees, like a bottle cap, instead of rattling.
-// The lug's top outer edge has a 45° bevel x that seats against the 45° groove roof, so locking also centres the cover.
+// Like the shade's lock: the groove has a constant 45° roof with clearance over the lug's bevelled top, and the lug
+// rests on the ledge under it with the cover flush. A small vertical click rib stands on each groove's outer wall just
+// behind where its lug comes to rest (as in the shade's lug-groove detent): the lug's outer face rides over it in the
+// last part of the turn and drops in behind it, so the cover clicks home and can't work loose. `coverFit` is how far
+// the rib reaches into the lug's path.
 function coverLock(B) {
   const k = coverShape(B), R = k.R, c = B.c, d = 2, lh = 1.5, T = P.coverT, x = 0.6;
   const lugA = Math.min(10 / R / DEG, 30);   // ~10 mm wide lugs (capped so three of them plus their turn still fit)
-  const ro = R - c + d, g = ro + 0.15;                // lug outer radius; groove outer radius (roof meets it at zr)
-  const zr1 = T - x - P.coverFit - (g - ro), zr0 = zr1 + 0.6 + P.coverFit;  // roof at lock (coverFit mm squeeze on the bevel) / at entry
-  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr0, zr1, zv: T + 2 * c, lugA, turn: lugA + 18, ca: (c / R) / DEG + 0.6, at: [90, 210, 330] };
+  const ro = R - c + d, g = ro + c;                     // lug outer radius; groove outer radius
+  const zr = T - x - (g - ro) + c;                      // roof: c mm clear of the lug's 45° bevel
+  const rr = 0.8, fit = Math.max(0.05, P.coverFit), rc = ro + rr - fit, m = ((rr + 0.3) / ro) / DEG;
+  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr, zv: T + 2 * c, lugA, turn: lugA + 18, ca: (c / R) / DEG + 0.6, at: [90, 210, 330], rr, rc, m, fit };
 }
 function coverCuts(B, seg) {
   const k = coverShape(B), out = [];
@@ -1189,26 +1205,21 @@ function coverCuts(B, seg) {
     out.push(tr(box(2.8, 5, P.coverT * 0.6 + 1), -k.hx - 2.5, -2.5, -1));   // fingernail notch
     return out;
   }
-  const L = coverLock(B), { R, g, zb, zr0: zt0, zr1: zt1, lugA, turn, ca } = L;
+  const L = coverLock(B), { R, g, zb, zr, lugA, turn, ca } = L;
   const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, L.zv], [R - 0.3, L.zv + L.gv - R + 0.3]];   // 45° roof: no flat overhang
-  const hPoly = z => [[R - 0.3, zb], [g, zb], [g, z], [R, z + (g - R)], [R - 0.3, z + (g - R)]];
-  const slice = (th, z) => hPoly(z).map(([r, zz]) => [r * Math.cos(th * DEG), r * Math.sin(th * DEG), zz]);
+  const hPoly = [[R - 0.3, zb], [g, zb], [g, zr], [R, zr + (g - R)], [R - 0.3, zr + (g - R)]];
   for (const a of L.at) {
     const a0 = a - turn - lugA / 2 - ca, a2 = a + lugA / 2 + ca;   // groove start (entry slot) and end
-    // tight pad under the lug's leading end at lock (~4 mm), reached over a ~2.5 mm ramp; play everywhere before it
-    const padA = Math.min(lugA / 2, (4 / R) / DEG), t1 = a + lugA / 2 - padA, t0 = t1 - (2.5 / R) / DEG;
     out.push(rotZ(revolve(vPoly, lugA + 2 * ca, seg), a0));
-    out.push(rotZ(revolve(hPoly(zt0), t0 - a0 + 0.1, seg), a0));
-    out.push(rotZ(revolve(hPoly(zt1), a2 - t1 + 0.1, seg), t1 - 0.1));
-    const n = Math.max(2, Math.ceil((t1 - t0) / 1.5));
-    for (let i = 0; i < n; i++) {
-      const u0 = t0 + (t1 - t0) * i / n, u1 = t0 + (t1 - t0) * (i + 1) / n;
-      out.push(keep(W.Manifold.hull([...slice(u0 - 0.05, zt0 + (zt1 - zt0) * i / n), ...slice(u1 + 0.05, zt0 + (zt1 - zt0) * (i + 1) / n)])));
-    }
+    out.push(rotZ(revolve(hPoly, a2 - a0, seg), a0));
   }
   return out;
 }
-function coverBumps(B) { return []; }   // the wedge lock holds the cover; no bumps needed
+function coverBumps(B) {   // the click ribs, one per groove, behind each lug's resting place
+  if (coverShape(B).rect) return [];
+  const L = coverLock(B);
+  return L.at.map(a => rotZ(tr(cyl(L.zr - L.zb + 0.01, L.rr, L.rr, 24), L.rc, 0, L.zb - 0.01), a - L.lugA / 2 - L.m));
+}
 function buildCover(seg) {
   const B = baseDims(), k = coverShape(B), c = B.c, T = P.coverT, list = [];
   if (k.rect) {
@@ -1219,8 +1230,17 @@ function buildCover(seg) {
   }
   const L = coverLock(B), Rc = L.R - c;
   list.push(cyl(T, Rc, Rc, seg));
-  const lug = [[Rc - 0.3, T - L.lh], [L.ro, T - L.lh], [L.ro, T - L.x], [L.ro - L.x, T], [Rc - 0.3, T]];
-  for (const a of L.at) list.push(rotZ(revolve(lug, L.lugA, seg), a - L.lugA / 2));
+  // Each lug's outer face is set back clear of the click rib except a short nose at its trailing end, reached over a
+  // short ramp: the lug turns freely past the rib and only the nose rides over it, in the last few degrees, and clicks.
+  const lug = r => [[Rc - 0.3, T - L.lh], [r, T - L.lh], [r, T - L.x], [r - L.x, T], [Rc - 0.3, T]];
+  const slice = (pts, th) => pts.map(([r, z]) => [r * Math.cos(th * DEG), r * Math.sin(th * DEG), z]);
+  const rRec = L.ro - L.fit - 0.15, noseA = (1.5 / L.ro) / DEG, rampA = (1.5 / L.ro) / DEG;
+  for (const a of L.at) {
+    const a0 = a - L.lugA / 2, a1 = a0 + noseA, a2 = a1 + rampA;
+    list.push(rotZ(revolve(lug(L.ro), noseA + 0.05, seg), a0));
+    list.push(keep(W.Manifold.hull([...slice(lug(L.ro), a1 - 0.02), ...slice(lug(rRec), a2 + 0.02)])));
+    list.push(rotZ(revolve(lug(rRec), a + L.lugA / 2 - a2, seg), a2));
+  }
   const sl = Math.min(24, 1.2 * Rc), sd = Math.min(1.2, T - 1.4);   // coin / fingernail slot to twist it
   return sub(uni(list), tr(box(sl, 2.4, sd + 1), -sl / 2, -1.2, -1));
 }
@@ -1288,7 +1308,8 @@ function baseOuter(B, seg) {
 
 // Base shell (two parts): the base is a shell of its own outside, `hollowT` thick, with a floor, round the hardware
 // chamber (a plain cylinder, as in one body; below the twist-lock floor it's only a wall round the light source). The void between them follows the outside (shape, twist and pattern)
-// and has a flat roof under the step, bridged from the chamber to the shell and held by radial ribs (at least 4)
+// and has a roof under the step (45° chamfers `shellChamfer` mm along both walls, if any) bridged from the chamber to
+// the shell and held by radial ribs (at least 4)
 // turned clear of the cable channel and the air vents. The cable channel keeps a full wall round it.
 const shellRibN = () => Math.max(4, P.hollowRibs);
 // rib angles: evenly spread, turned as far as possible from the cable channel (0°) and the air vents
@@ -1306,14 +1327,16 @@ function shellCavity(B, Rmax, seg) {
   const t = P.hollowT, surf = baseSurface(B), zf = t, zc = skirtDims(B).zL - t;
   if (zc - zf < 3) return null;
   const lean = Math.abs(B.Rt - B.Rb) / Math.max(1, zc + t), tt = t * Math.sqrt(1 + lean * lean);
+  const h = Math.min(P.shellChamfer, (zc - zf) / 2);   // 45° chamfers in both top corners of the void
   const N = Math.max(128, seg * 2), zs = [];
   const nz = Math.max(3, Math.ceil((zc - zf) / 0.6));
   for (let i = 0; i <= nz; i++) zs.push(zf + (zc - zf) * i / nz);
+  if (h > 0) { zs.push(zc - h); zs.sort((a, b) => a - b); }
   const M = zs.length, NM = N * M, v = new Float32Array(NM * 3 + 6);
   for (let i = 0; i < M; i++) {
-    const z = zs[i];
+    const z = zs[i], pull = h > 0 ? Math.max(0, z - (zc - h)) : 0;   // the outer chamfer: the shell steps in 45° under the roof
     for (let j = 0; j < N; j++) {
-      const a = TAU * j / N, r = Math.max(1, surf(a, z) - tt), q = (i * N + j) * 3;
+      const a = TAU * j / N, r = Math.max(1, surf(a, z) - tt - pull), q = (i * N + j) * 3;
       v[q] = r * Math.cos(a); v[q + 1] = r * Math.sin(a); v[q + 2] = z;
     }
   }
@@ -1326,7 +1349,9 @@ function shellCavity(B, Rmax, seg) {
   const top = (M - 1) * N;
   for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
   const cav = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
-  const keepOut = [tr(cyl(zc - zf + 2, B.Rcore, B.Rcore, seg), 0, 0, zf - 1)];
+  const Rc = B.Rcore, keepOut = [h > 0   // the chamber, with its own 45° chamfer under the roof
+    ? revolve([[0, zf - 1], [Rc, zf - 1], [Rc, zc - h], [Rc + h + 1, zc + 1], [0, zc + 1]], 360, seg)
+    : tr(cyl(zc - zf + 2, Rc, Rc, seg), 0, 0, zf - 1)];
   for (const a of shellRibAngles(B)) keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), a));
   const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;   // cable channel with a wall round it
   keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
@@ -2282,6 +2307,31 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Twist', 'twist', -360, 360, 1, '°');
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
 
+  h3(p, 'Twist lock', () => twistOn() && !combined());
+  slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
+  slider(p, 'Collar wall', 'collarWall', 1.6, 5, 0.1, 'mm', twistOn);
+  slider(p, 'Collar height', 'collarH', 8, 30, 0.5, 'mm', twistOn);
+  slider(p, 'Lugs', 'lugs', 2, 6, 1, '', twistOn);
+  slider(p, 'Lug width', 'lugW', 8, 50, 1, '°', twistOn);
+  slider(p, 'Lug height', 'lugH', 2, 8, 0.1, 'mm', twistOn);
+  slider(p, 'Lug depth', 'lugDepth', 1, 4, 0.1, 'mm', twistOn);
+  slider(p, 'Turn to lock', 'turn', 10, 60, 1, '°', twistOn);
+  slider(p, 'Clearance', 'clearance', 0.1, 0.8, 0.05, 'mm', twistOn);
+  note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
+  toggleRow(p, 'Click detent', 'detent', twistOn);
+  segmented(p, 'Click style', 'detentStyle', { lug: 'In lug groove', collar: 'Collar grooves' }, () => twistOn() && P.detent);
+  note(p, 'In lug groove: a small rib in each of the base’s lug grooves. The lug rides over it for the last part of the turn and clicks in behind it, so the collar needs no cuts. It needs a turn a few degrees longer than the lug width; otherwise the collar style is used.', () => twistOn() && P.detent && P.detentStyle !== 'collar');
+  note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
+  note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
+  slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
+  slider(p, 'Shade plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', skirtOn);
+  note(p, 'Inside the shade, a flat plate joins the wall to the collar; the outside stays exactly as designed down to the bed. The plate prints as a bridge from the collar out to the wall; turn on supports there if your printer bridges poorly.', skirtOn);
+  slider(p, 'Shade plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', skirtOn);
+  note(p, 'A 45° fillet under the plate where it meets the wall: it shortens the bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the wall hugs the neck. 0 turns it off.', skirtOn);
+  slider(p, 'Shade plate ribs', 'skirtRibs', 0, 8, 1, '', skirtOn);
+  note(p, 'Webs under the plate, from the shade’s bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the shade for twisting.', skirtOn);
+  slider(p, 'Shade rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => skirtOn() && P.skirtRibs > 0);
+
   h3(pb, 'Base', tableBase);
   slider(pb, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
   slider(pb, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
@@ -2302,7 +2352,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
   h3(pb, 'Shell', tableBase);
   slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', tableBase);
-  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4, set on the Lamp tab) run from the chamber’s wall out to the shell. The roof under the step is flat: it bridges from the chamber to the shell between the ribs (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
+  slider(pb, 'Roof chamfer', 'shellChamfer', 0, 10, 0.5, 'mm', tableBase);
+  note(pb, '45° chamfers in both top corners of the hollow, along the shell and along the chamber wall: they shorten the roof’s bridge and print without supports. 0 leaves a flat roof.', tableBase);
+  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4, set on the Lamp tab) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
 }
 
 // Pattern tab
@@ -2380,30 +2432,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Ribs', 'hollowRibs', 4, 12, 1, '', tableBase);
   note(p, 'Radial webs from the chamber out to the base’s shell (two parts) or the shade’s wall (one body), as thick as the base shell. They hold the roof up while it prints and keep the chamber rigid.', tableBase);
 
-  h3(p, 'Twist lock', () => twistOn() && !combined());
-  slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
-  slider(p, 'Collar wall', 'collarWall', 1.6, 5, 0.1, 'mm', twistOn);
-  slider(p, 'Collar height', 'collarH', 8, 30, 0.5, 'mm', twistOn);
-  slider(p, 'Lugs', 'lugs', 2, 6, 1, '', twistOn);
-  slider(p, 'Lug width', 'lugW', 8, 50, 1, '°', twistOn);
-  slider(p, 'Lug height', 'lugH', 2, 8, 0.1, 'mm', twistOn);
-  slider(p, 'Lug depth', 'lugDepth', 1, 4, 0.1, 'mm', twistOn);
-  slider(p, 'Turn to lock', 'turn', 10, 60, 1, '°', twistOn);
-  slider(p, 'Clearance', 'clearance', 0.1, 0.8, 0.05, 'mm', twistOn);
-  note(p, 'Lugs and groove roofs are chamfered at 45° so both parts print without supports. Start with 0.3 mm clearance; go to 0.4 mm for PETG or a loose printer.', twistOn);
-  toggleRow(p, 'Click detent', 'detent', twistOn);
-  segmented(p, 'Click style', 'detentStyle', { lug: 'In lug groove', collar: 'Collar grooves' }, () => twistOn() && P.detent);
-  note(p, 'In lug groove: a small rib in each of the base’s lug grooves. The lug rides over it for the last part of the turn and clicks in behind it, so the collar needs no cuts. It needs a turn a few degrees longer than the lug width; otherwise the collar style is used.', () => twistOn() && P.detent && P.detentStyle !== 'collar');
-  note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
-  note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
-  slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
-  slider(p, 'Shade plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', skirtOn);
-  note(p, 'Inside the shade, a flat plate joins the wall to the collar; the outside stays exactly as designed down to the bed. The plate prints as a bridge from the collar out to the wall; turn on supports there if your printer bridges poorly.', skirtOn);
-  slider(p, 'Shade plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', skirtOn);
-  note(p, 'A 45° fillet under the plate where it meets the wall: it shortens the bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the wall hugs the neck. 0 turns it off.', skirtOn);
-  slider(p, 'Shade plate ribs', 'skirtRibs', 0, 8, 1, '', skirtOn);
-  note(p, 'Webs under the plate, from the shade’s bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the shade for twisting.', skirtOn);
-  slider(p, 'Shade rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => skirtOn() && P.skirtRibs > 0);
 
   h3(p, 'Cable & cover', tableBase);
   slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
@@ -2411,10 +2439,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
   note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
   toggleRow(p, 'Bottom cover', 'cover', () => tableBase() && P.insert !== 'puck');
-  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock: line up the lugs, push in and turn with a coin in the slot — the last part of the turn wedges it tight. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
+  note(p, 'A separate cover (export it with “Export cover STL”) that closes the opening under the base once the puck and cable are in; the cable runs over it and out through the channel. Round covers (funnel, bulb holder) twist-lock like the shade: line up the lugs with the slots, push in and turn with a coin in the slot until it clicks. The straight-slot bar snaps in and pries out at the notch.', () => tableBase() && P.insert !== 'puck' && P.cover);
   slider(p, 'Cover thickness', 'coverT', 1.4, 4, 0.1, 'mm', () => tableBase() && P.insert !== 'puck' && P.cover);
-  slider(p, 'Cover tightness', 'coverFit', -0.2, 0.4, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
-  note(p, 'How hard the twist-lock squeezes the cover in the last few degrees of the turn (it turns freely before that): 0.1 mm is snug on most printers. Raise it if the printed cover still moves, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  slider(p, 'Cover click strength', 'coverFit', 0.1, 0.6, 0.05, 'mm', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
+  note(p, 'How far the click rib in each lock groove reaches into the lug’s path: the cover turns freely, rides over the ribs at the end of the turn and clicks in behind them. 0.25 mm is a firm click on most printers; raise it if the cover works loose, lower it if it’s too stiff to turn.', () => tableBase() && P.cover && (P.insert === 'socket' || P.slotStyle === 'funnel'));
 
   const difOn = () => tableBase() && (puckOn() || slotOn()), difSet = () => difOn() && P.diffuser;
   h3(p, 'Diffuser', difOn);
