@@ -986,9 +986,12 @@ function baseDims() {
   }
   // hardware chamber: wall round the light-source cavity and cover, and round the twist-lock grooves when there are any
   const part = { Ri, Ro, c, adapter, insert, f: 0 };
-  const Rch = adapter ? Rt : Math.max(Math.max(baseFeatureR(part), coverActive(part) ? coverOuter(part) : 0) + P.chamberWall, comb ? 0 : gr1 + 3);
+  // Rcore: the wall round the light source alone (the hollow base's void comes in this far under the twist-lock floor)
+  const notch = insert === 'slot' && underGap() > 0 ? P.slotD / 2 + c + 2.4 : 0;
+  const Rcore = Math.max(baseFeatureR(part), coverActive(part) ? coverOuter(part) : 0, notch) + P.chamberWall;
+  const Rch = adapter ? Rt : Math.max(Rcore, comb ? 0 : gr1 + 3);
   if (comb) { H = minH; f = H; Rt = Rb = Rch; }   // one body: the chamber is all there is below the shade
-  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, Rch, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
+  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, Rch, Rcore, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
 }
 
 // ---------------------------------------------------------------- dependent limits
@@ -1126,7 +1129,7 @@ function intakeSlope(B, overGroove) {
   return null;
 }
 // Spread the holes evenly, turned so as many as possible miss the cable channel (along +X) and the cover's grooves.
-function intakeLayout(B) {
+function intakeLayout(B, all = false) {   // all: keep every hole, sloped or not (a hollow base drills its own)
   const n = P.intakeN, R = slotDims(B).cavR, hr = P.intakeD / 2, wrap = a => ((a % 360) + 540) % 360 - 180;
   const chanHalf = Math.asin(Math.min(1, (P.cableW / 2 + hr + 1.5) / R)) / DEG;
   const grooves = [];
@@ -1142,7 +1145,8 @@ function intakeLayout(B) {
     const free = angs.filter(a => !inGroove(a)).length, clear = Math.min(...angs.map(a => Math.abs(wrap(a))));
     if (!best || free > best.free || (free === best.free && clear > best.clear)) best = { free, clear, angs };
   }
-  return (best?.angs || []).map(a => ({ a, g: intakeSlope(B, inGroove(a)) })).filter(h => h.g);
+  const holes = (best?.angs || []).map(a => ({ a, groove: inGroove(a), g: intakeSlope(B, inGroove(a)) }));
+  return all ? holes : holes.filter(h => h.g);
 }
 function intakeHoles(B, Rmax = B.Rb, grow = 0) {   // grow: thicker copies, kept solid around the holes in a hollow base
   if (!intakeOn()) return [];
@@ -1282,23 +1286,34 @@ function baseOuter(B, seg) {
   return { man: keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), Rmax };
 }
 
-// Base shell (two parts): the base is a shell of its own outside, `hollowT` thick, with a floor, round the chamber.
-// The void between them follows the outside (shape, twist and pattern), and its roof under the step has 45° chamfers
-// along both walls, bridging the rest; radial ribs tie the shell to the chamber and shorten that bridge. The cable
-// channel and any air intakes keep a full wall round them.
+// Base shell (two parts): the base is a shell of its own outside, `hollowT` thick, with a floor, round the hardware
+// chamber (a plain cylinder, as in one body; below the twist-lock floor it's only a wall round the light source). The void between them follows the outside (shape, twist and pattern)
+// and has a flat roof under the step, bridged from the chamber to the shell and held by radial ribs (at least 4)
+// turned clear of the cable channel and the air vents. The cable channel keeps a full wall round it.
+const shellRibN = () => Math.max(4, P.hollowRibs);
+// rib angles: evenly spread, turned as far as possible from the cable channel (0°) and the air vents
+function shellRibAngles(B) {
+  const n = shellRibN(), avoid = [0, ...(intakeOn() ? intakeLayout(B, true).map(h => h.a) : [])];
+  const wrap = a => Math.abs(((a % 360) + 540) % 360 - 180);
+  let best = 180 / n, score = -1;
+  for (let off = 0; off < 360 / n; off += 0.5) {
+    const m = Math.min(...Array.from({ length: n }, (_, k) => Math.min(...avoid.map(v => wrap(off + k * 360 / n - v)))));
+    if (m > score + 1e-6) { score = m; best = off; }
+  }
+  return Array.from({ length: n }, (_, k) => best + k * 360 / n);
+}
 function shellCavity(B, Rmax, seg) {
   const t = P.hollowT, surf = baseSurface(B), zf = t, zc = skirtDims(B).zL - t;
   if (zc - zf < 3) return null;
-  const h = Math.min(8, (zc - zf) / 2), lean = Math.abs(B.Rt - B.Rb) / Math.max(1, zc + t), tt = t * Math.sqrt(1 + lean * lean);
+  const lean = Math.abs(B.Rt - B.Rb) / Math.max(1, zc + t), tt = t * Math.sqrt(1 + lean * lean);
   const N = Math.max(128, seg * 2), zs = [];
   const nz = Math.max(3, Math.ceil((zc - zf) / 0.6));
   for (let i = 0; i <= nz; i++) zs.push(zf + (zc - zf) * i / nz);
-  zs.push(zc - h); zs.sort((a, b) => a - b);
   const M = zs.length, NM = N * M, v = new Float32Array(NM * 3 + 6);
   for (let i = 0; i < M; i++) {
-    const z = zs[i], pull = Math.max(0, z - (zc - h));   // the outer chamfer: the wall steps in 45° under the roof
+    const z = zs[i];
     for (let j = 0; j < N; j++) {
-      const a = TAU * j / N, r = Math.max(1, surf(a, z) - tt - pull), q = (i * N + j) * 3;
+      const a = TAU * j / N, r = Math.max(1, surf(a, z) - tt), q = (i * N + j) * 3;
       v[q] = r * Math.cos(a); v[q + 1] = r * Math.sin(a); v[q + 2] = z;
     }
   }
@@ -1311,15 +1326,33 @@ function shellCavity(B, Rmax, seg) {
   const top = (M - 1) * N;
   for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
   const cav = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
-  // the chamber with its own 45° chamfer under the roof
-  const keepOut = [revolve([[0, zf - 1], [B.Rch, zf - 1], [B.Rch, zc - h], [B.Rch + h + 1, zc + 1], [0, zc + 1]], 360, seg)];
-  for (let k = 0; k < P.hollowRibs; k++) {   // ribs from the chamber to the shell, clear of the cable channel at 0°
-    keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), (k + 0.5) * 360 / P.hollowRibs));
-  }
+  const keepOut = [tr(cyl(zc - zf + 2, B.Rcore, B.Rcore, seg), 0, 0, zf - 1)];
+  for (const a of shellRibAngles(B)) keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), a));
   const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;   // cable channel with a wall round it
   keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
-  keepOut.push(...intakeHoles(B, Rmax, t));
   return sub(cav, uni(keepOut));
+}
+// Air vents through a hollow base: a hole slanting up and in through the outer shell into the void (so you can't see
+// in from the side), and a level hole through the chamber wall into the funnel at each vent, above the floor and the
+// cover (and its lock groove, where one lines up).
+function shellVents(B, Rmax) {
+  if (!intakeOn()) return [];
+  const t = P.hollowT, surf = baseSurface(B), s = slotDims(B), hr = P.intakeD / 2, th = 35 * DEG, cov = coverActive(B);
+  const zc = skirtDims(B).zL - t, out = [];
+  for (const { a, groove } of intakeLayout(B, true)) {
+    // outer: its lower edge breaks into the void a little above the floor
+    const lift = hr / Math.cos(th), ze = Math.max(P.footChamfer + hr + 1, t + lift + 0.4);
+    const Ro = surf(a * DEG, ze), rEnd = B.Rcore + 0.3;
+    if (ze + (Ro - rEnd) * Math.tan(th) + lift > zc) continue;   // no room under the roof
+    const r0 = Math.max(Ro, Rmax) + 3, z0 = ze - (r0 - Ro) * Math.tan(th), len = (r0 - rEnd) / Math.cos(th);
+    out.push(rotZ(tr(rot(cyl(len, hr, hr, 24), [0, -(90 - th / DEG), 0]), r0, 0, z0), a));
+    // inner: level, through the chamber wall
+    const zLo = cov ? (groove ? coverLock(B).zv + 0.6 : P.coverT + 0.6) : 0.8;
+    const zi = Math.max(zLo + hr, t + hr + 0.6);   // low, where the funnel is widest; the void joins it to the slanted hole
+    if (zi + hr > Math.min(zc, s.zFunnel + (s.cavR - P.slotW / 2) - 1)) continue;
+    out.push(rotZ(tr(rot(cyl(B.Rcore + 1 - (s.cavR - 2), hr, hr, 24), [0, 90, 0]), s.cavR - 2, 0, zi), a));
+  }
+  return out;
 }
 // Solid filling the shade's outer surface (rows from S), for trimming things into its wall.
 function shadeFill(S) {
@@ -1340,14 +1373,34 @@ function shadeFill(S) {
 function chamberBody(B, S, seg, withWall) {
   const t = P.hollowT, fill = shadeFill(S), big = S.maxR + 5;
   const ties = [cyl(t, big, big, seg)];
-  for (let k = 0; k < P.hollowRibs; k++) ties.push(rotZ(tr(box(big, t, B.H), 0, -t / 2, 0), (k + 0.5) * 360 / P.hollowRibs));
+  const n = shellRibN();
+  for (let k = 0; k < n; k++) ties.push(rotZ(tr(box(big, t, B.H), 0, -t / 2, 0), (k + 0.5) * 360 / n));
   const list = [cyl(B.H, B.Rch, B.Rch, seg), keep(fill.intersect(uni(ties)))];
   if (withWall) list.push(keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx }))));
   return uni(list);
 }
 
+let lastBodyCuts = null;
+// One-body preview: the shade's wall with the base's cuts (cable channel, air intakes) through it, coloured for overhang
+// like the plain wall (the faces of the cuts themselves are left out of that).
+function cutWallGeo(S, cuts) {
+  const wall = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
+  const geo = manifoldToGeo(keep(wall.subtract(cuts))), gone = keep(wall.intersect(cuts));
+  const zCut = gone.isEmpty() ? -1 : gone.boundingBox().max[2] + 0.5;
+  const nrm = geo.attributes.normal.array, pos = geo.attributes.position.array, col = new Float32Array(pos.length);
+  const base = new THREE.Color(P.color), red = new THREE.Color('#ff3b30'), lim = P.overhang + 0.5, zMin = Math.max(0.6, zCut);
+  for (let k = 0; k < pos.length; k += 9) {
+    const z = (pos[k + 2] + pos[k + 5] + pos[k + 8]) / 3, nz = (nrm[k + 2] + nrm[k + 5] + nrm[k + 8]) / 3;
+    const flag = view3.over && z > zMin && z < S.zEnd - 0.6 && nz < 0 && Math.asin(Math.min(1, -nz)) / DEG > lim;
+    const c = flag ? red : base;
+    for (let q = 0; q < 9; q += 3) { col[k + q] = c.r; col[k + q + 1] = c.g; col[k + q + 2] = c.b; }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
 function buildBase(seg, S = null, withWall = false) {
   const B = baseDims(), { H, f } = B, comb = combined();
+  lastBodyCuts = null;
   if (comb && !S) S = buildShade(128, 0.6);
   const styled = !B.adapter && !comb && P.baseStyle !== 'plain' ? baseOuter(B, seg) : null;
   const zTop = skirtOn() ? skirtDims(B).zL : H, topPts = zTop < H ? [[B.Rt, zTop], [B.Rt, H], [0, H]] : [[B.Rt, H], [0, H]];
@@ -1358,7 +1411,8 @@ function buildBase(seg, S = null, withWall = false) {
     const sd = skirtDims(B);
     body = keep(body.intersect(uni([cyl(sd.zL, Rmax + 5, Rmax + 5, seg), tr(cyl(H - sd.zL + 1, sd.Rneck, sd.Rneck, seg), 0, 0, sd.zL - 0.01)])));
   }
-  if (skirtOn()) { const cav = shellCavity(B, Rmax, seg); if (cav) body = sub(body, cav); }
+  const cav = skirtOn() ? shellCavity(B, Rmax, seg) : null;
+  if (cav) body = sub(body, cav);
   const cut = combined() ? [] : [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
   const ca = (B.c / B.Ro) / DEG + 0.6;
@@ -1412,9 +1466,11 @@ function buildBase(seg, S = null, withWall = false) {
       ins.push(keep(W.Manifold.hull([...chan(X - 3, 3.5, P.coverT), ...chan(X + 0.5 + P.coverT, 0.01, 0)])));
     }
   }
-  ins.push(...intakeHoles(B, Rmax));
+  ins.push(...(cav ? shellVents(B, Rmax) : intakeHoles(B, Rmax)));
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
-  result = sub(result, uni(ins));
+  const insAll = uni(ins);
+  if (comb) lastBodyCuts = keep(insAll);   // the preview cuts the shade's wall with these too
+  result = sub(result, insAll);
   if (B.insert === 'slot' && P.underPuck === 'ribs') {
     // raiser ribs on the two ledges beside the slot, parallel to it, so the puck still goes in edgewise and turns flat
     const s = slotDims(B), hx = P.slotD / 2 + B.c, hw = P.slotW / 2, yc = (hw + hx) / 2, w = 2, h = underGap();
@@ -1618,14 +1674,15 @@ function update() {
   clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup); clearGroup(coverGroup);
   connMat.color.set(P.color); baseMat.color.set(combined() ? P.color : P.baseColor);
   // in the cutaway the shade and connector are merged into one solid, so the section shows no seams where they overlap
-  const merged = view3.cut && W && P.mount !== 'none';
-  if (!merged) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
+  const merged = view3.cut && W && P.mount !== 'none', wallCut = W && combined();
+  if (!merged && !wallCut) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
 
   let connVol = 0, baseVol = 0, coverVol = 0, baseBox = null, baseOv = null;
   const B = baseDims();
   if (W) gcScope(() => {
     const c = shadeConnector(S, 96, merged ? 0.4 : 0);
-    if (c && merged) {
+    if (wallCut) { /* the wall goes in once the base's cuts are known */ }
+    else if (c && merged) {
       const body = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
       addSolid(shadeGroup, manifoldToGeo(keep(body.add(c))), connMat, capShadeMat);
     } else if (merged) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
@@ -1636,6 +1693,7 @@ function update() {
       baseOv = B.adapter || combined() ? null : baseOverhang(g, B);
       addSolid(baseGroup, g, baseOv ? baseOvMat : baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox();
     }
+    if (wallCut) addSolid(shadeGroup, lastBodyCuts ? cutWallGeo(S, lastBodyCuts) : geo, shadeMat, capShadeMat);
     if (P.mount === 'twist' && coverActive(B)) {
       const cv = buildCover(96); coverVol = cv.volume();
       addSolid(coverGroup, manifoldToGeo(cv), baseMat, capBaseMat);
@@ -2244,7 +2302,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
   h3(pb, 'Shell', tableBase);
   slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', tableBase);
-  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; its roof under the step has 45° chamfers along both walls and bridges the rest, held by the ribs, so it prints without supports. The cable channel and air intakes keep a full wall round them.', tableBase);
+  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4, set on the Lamp tab) run from the chamber’s wall out to the shell. The roof under the step is flat: it bridges from the chamber to the shell between the ribs (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
 }
 
 // Pattern tab
@@ -2319,7 +2377,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
     reg(st, tableBase, () => { const B = baseDims(); st.textContent = `A cylinder Ø${fmt(2 * B.Rch)} × ${fmt(B.H)} mm holding the light source, cable channel and cover${combined() ? '' : ', with the twist-lock socket on top'}. It sets the smallest the shade’s bottom${combined() ? '' : ' and the base'} can be.`; });
   }
   slider(p, 'Chamber wall', 'chamberWall', 1.2, 6, 0.1, 'mm', tableBase);
-  slider(p, 'Ribs', 'hollowRibs', 0, 12, 1, '', tableBase);
+  slider(p, 'Ribs', 'hollowRibs', 4, 12, 1, '', tableBase);
   note(p, 'Radial webs from the chamber out to the base’s shell (two parts) or the shade’s wall (one body), as thick as the base shell. They hold the roof up while it prints and keep the chamber rigid.', tableBase);
 
   h3(p, 'Twist lock', () => twistOn() && !combined());
@@ -2785,7 +2843,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { innerPlate, engineFailed, shellCavity, combined, shadeMinNeed, baseSurface, shadeBottomD, changed, refreshAll, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { shellVents, shellRibAngles, intakeLayout, innerPlate, engineFailed, shellCavity, combined, shadeMinNeed, baseSurface, shadeBottomD, changed, refreshAll, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
