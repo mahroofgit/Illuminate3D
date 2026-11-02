@@ -2203,8 +2203,8 @@ function toggleRow(parent, label, key, when) {
 const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
   'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'diffVentStyle', 'diffVentN', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
 const BUILTIN_PRESETS = {
-  '3mm LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32.5, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.2, fingerRoom: 2, underPuck: 'tape', underGap: 2, intake: true, intakeN: 4, intakeD: 6.5, puckLift: 7.5,
-    diffuser: true, diffStyle: 'flat', diffT: 0.4, diffGap: 5, diffChamfer: 5, diffVent: 8, cableD: 3.2, cableW: 5.4, cableGrip: true, cover: true, coverT: 2.6 },
+  '31mm PCB LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.2, fingerRoom: 2, underPuck: 'tape', underGap: 2, intake: true, intakeN: 4, intakeD: 3.5, puckLift: 8,
+    diffuser: false, cableD: 3.2, cableW: 5.4, cableGrip: true, cover: true, coverT: 2.6, coverFit: 0.15 },
 };
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function customPresets() { try { return JSON.parse(localStorage.getItem('illum.presets') || '{}'); } catch (e) { return {}; } }
@@ -2286,7 +2286,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   const tab = document.getElementById('p-shape');
   // One body / two parts at the very top (table lamps), then the Shade / Base switch when there's a base to shape
   segmented(tab, 'Print as', 'parts', { two: 'Two parts', one: 'One body' }, tableBase);
-  note(tab, '<b>Two parts</b>: a shade that twists onto a base. The base is a shell of its own shape round the hardware chamber, tied to it by ribs; the chamber’s top is the neck the shade locks onto. <b>One body</b>: the shade’s own outline runs right down to the bed and the hardware chamber stands inside its bottom, tied to the wall by ribs and a floor, so the whole lamp is one print (plus the bottom cover if you use one). The light goes in from below (slot-in puck) or through the open top. The hardware chamber and its settings are in the Lamp tab.', tableBase);
+  note(tab, '<b>Two parts</b>: a shade that twists onto a base. The base is a shell of its own shape round the hardware chamber, tied to it by ribs; the chamber’s top is the neck the shade locks onto. <b>One body</b>: the shade’s own outline runs right down to the bed and the hardware chamber stands inside its bottom, tied to the wall by ribs and a floor, so the whole lamp is one print (plus the bottom cover if you use one). The light goes in from below (PCB LED puck) or through the open top. The hardware chamber and its settings are in the Lamp tab.', tableBase);
   {
     const st = document.createElement('div'); st.className = 'note'; tab.append(st);
     reg(st, () => tableBase() && P.parts === 'one' && diffuserOn(), () => { st.textContent = 'One body isn’t available while the diffuser is on (it has to go in from below), so this prints as two parts. Turn the diffuser off in Lamp › Diffuser.'; });
@@ -2426,7 +2426,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
 
   h3(p, 'Lamp hardware', () => twistOn() || ringOn());
   presetRow(p, tableBase);
-  segmented(p, 'Type', 'insert', { puck: 'LED puck', slot: 'Slot-in puck', socket: 'Bulb socket' }, tableBase);
+  select(p, 'Type', 'insert', { puck: 'Enclosed LED puck', slot: 'PCB LED puck', socket: 'Bulb socket' }, tableBase);
   note(p, 'Feed the puck up from underneath, on its edge, through the slot (the cable trails below). Once its top edge pokes out, pull it up, turn it flat, and it rests around the slot in a shallow seat.', slotOn);
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);

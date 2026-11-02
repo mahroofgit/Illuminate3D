@@ -11,7 +11,7 @@ A browser-based designer for 3D-printable lampshades and their fittings. Shape t
 - **Connectors**
   - *Socket ring* – clamps straight onto an E27, E14, B22, M10 nipple or custom holder (spokes or solid disc).
   - *Twist-lock* – bayonet collar on the shade with 45° chamfered lugs and an optional click detent; locks into a separate part:
-    - **Table base** with an LED puck pocket, a **slot-in puck** seat (push a small puck up edgewise through a slot, turn it flat; straight slot for a low base or a finger funnel), or a bulb-socket mount with a holder cavity.
+    - **Table base** with an **enclosed LED puck** pocket, a **PCB LED puck** seat (push a bare LED board up edgewise through a slot, turn it flat; straight slot for a low base or a finger funnel), or a bulb-socket mount with a holder cavity.
     - **Socket adapter** for pendants.
   - Optional **bottom cover** (twist-lock with a wedge that locks it tight, or a snap-in bar), **puck riser** and a **diffuser** inside the shade over the puck (support-free cone, or flat with slicer supports; optional centre vent hole).
 - **Shape › Base** – set the table base’s size and give it the shade’s cross-section and patterns (lined up with the locked shade) or its own sides and twist; the lock, cavity, cover and vents inside are never touched.
