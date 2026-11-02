@@ -210,8 +210,7 @@ main canvas { display: block; width: 100%; height: 100%; }
 #viewpad button { border: 0; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 10.5px; padding: 4px 0; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
 #viewpad button.fit { display: flex; gap: 6px; justify-content: center; align-items: center; padding: 7px 0; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
 #viewpad button:hover { color: var(--accent); background: var(--accent-soft); }
-#vpBaseCut { margin-bottom: 2px; color: var(--text) !important; }
-#vpBaseCut.on { color: var(--accent) !important; background: var(--accent-soft); }
+#vpBaseCut { margin-bottom: 2px; color: var(--text); }
 #viewpad { bottom: 104px; }   /* clear of the bottom toolbar and the Section bar above it */
 @media (min-width: 1500px) { #viewpad { bottom: 12px; } }
 .info { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 5px; border-radius: 50%; border: 1px solid currentColor; color: var(--muted); font: italic 700 9px/1 Georgia, serif; vertical-align: 1px; cursor: help; text-transform: none; letter-spacing: 0; opacity: .8; }
@@ -392,7 +391,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, shellChamfer: 3, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, shellChamfer: 3, shadeBlend: 0, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.25,
@@ -541,6 +540,14 @@ function buildShade(N, layer) {
   for (let j = 0; j < N; j++) { ang[j] = TAU * j / N; cosA[j] = Math.cos(ang[j]); sinA[j] = Math.sin(ang[j]); }
 
   let neckH = 0;   // height of the neck below the body; the connector-end pattern fade counts from its bottom
+  // Blend into a plain or custom base: over the bottom `shadeBlend` mm the outside eases (smootherstep) from the shade's
+  // own section to the base's outline at its top edge, as the two sit locked, so they meet without a step.
+  let blendT = null, blendH = 0, blendMin = 0;
+  if (blendOn()) {
+    const B = baseDims(), surf = baseSurface(B), zL = skirtDims(B).zL, turn = P.turn * DEG;
+    blendT = new Float64Array(N); blendH = P.shadeBlend; blendMin = skirtDims(B).Rni + 0.4;
+    for (let j = 0; j < N; j++) blendT[j] = surf(ang[j] - turn, zL);
+  }
   function rowBody(zb, O, I) {
     const tP = zb / H, tU = pend ? 1 - tP : tP;
     const base = pr(tU), tw = twAt(tU);
@@ -554,6 +561,10 @@ function buildShade(N, layer) {
       let r = base * shapeF(a);
       if (fade > 0) r += fade * patt(a, tU, zU, base);
       r = Math.max(r, P.wall + 2);
+      if (blendT && zb < blendH) {
+        const u = zb / blendH, w = 1 - u * u * u * (u * (u * 6 - 15) + 10);
+        r = Math.max(r + (blendT[j] - r) * w, blendMin + wh);   // the wall stays clear of the base's neck
+      }
       O[j] = r; I[j] = Math.max(1, r - wh);
     }
   }
@@ -797,6 +808,7 @@ function diffuserSolid(S, seg) {
 // it to its collar. One body: the shade's own outline runs down to the bed, the chamber stands inside its bottom, tied
 // to the wall by ribs and a floor (no base shape, no twist lock). Not with a diffuser, which has to go in from below.
 const combined = () => P.parts === 'one' && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !diffuserOn();
+const blendOn = () => P.shadeBlend > 0 && skirtOn() && !combined() && P.baseStyle !== 'match';
 const skirtOn = () => P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !combined();
 const flatSkirtOn = skirtOn;
 function skirtDims(B) {
@@ -1198,7 +1210,7 @@ function coverLock(B) {
   const ro = R - c + d, g = ro + c;                     // lug outer radius; groove outer radius
   const zr = T - x - (g - ro) + c;                      // roof: c mm clear of the lug's 45° bevel
   const rr = 0.8, fit = Math.max(0.05, P.coverFit), rc = ro + rr - fit, m = ((rr + 0.3) / ro) / DEG;
-  return { R, c, d, lh, T, x, ro, g, gv: R + d + c, zb: T - lh, zr, zv: T + 2 * c, lugA, turn: lugA + 18, ca: (c / R) / DEG + 0.6, at: [90, 210, 330], rr, rc, m, fit };
+  return { R, c, d, lh, T, x, ro, g, gv: g, zb: T - lh, zr, zv: T + 2 * c, lugA, turn: lugA + 18, ca: (c / R) / DEG + 0.6, at: [90, 210, 330], rr, rc, m, fit };   // gv = g: the entry slot's wall is flush with the groove's
 }
 function coverCuts(B, seg) {
   const k = coverShape(B), out = [];
@@ -2347,6 +2359,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   const styledOn = () => tableBase() && P.baseStyle !== 'plain';
   segmented(pb, 'Outer surface', 'baseStyle', { plain: 'Plain', match: 'Match shade', custom: 'Custom' }, tableBase);
   note(pb, 'Shapes only the outside of the base. <b>Match shade</b> uses the shade’s cross-section (sides, rounding, oval) and its patterns, lined up with the shade when it’s locked, and carries a linear twist on down. <b>Custom</b> gives the base its own sides and twist. The pattern settings appear once a pattern is turned on in the Pattern tab. The surface never comes closer than 2.4 mm to the lock grooves, puck cavity or cover inside, so the lock, ventilation and hardware fit stay exactly the same; the bottom and top edges fade back to plain for a clean first layer and rim.', tableBase);
+  slider(pb, 'Blend shade into base', 'shadeBlend', 0, 80, 1, 'mm', () => tableBase() && P.baseStyle !== 'match');
+  note(pb, 'Over this height at the shade’s bottom, its outside eases smoothly from its own shape into the base’s outline at the joint (as they sit locked), so a twisted or patterned shade meets a plain or custom base without a step. 0 keeps the shade exactly as designed. Turn on <b>Lock top to shade bottom</b> too for the gentlest blend.', () => tableBase() && P.baseStyle !== 'match');
   slider(pb, 'Base sides (0 = round)', 'baseSides', 0, 12, 1, '', () => tableBase() && P.baseStyle === 'custom');
   slider(pb, 'Base corner rounding', 'baseRound', 0, 1, 0.01, '', () => tableBase() && P.baseStyle === 'custom' && P.baseSides >= 3);
   slider(pb, 'Base twist', 'baseTwist', -180, 180, 1, '°', () => tableBase() && P.baseStyle === 'custom');
@@ -2596,20 +2610,8 @@ function focusConnector() {
   setView('front', bb);
 }
 
-// Base section button: the same cutaway close on the base the Lamp tab opens with; pressing it again puts the
-// cutaway back (if it switched it on) and fits the whole lamp.
-{
-  const btn = document.getElementById('vpBaseCut');
-  btn.addEventListener('click', () => {
-    if (btn.classList.contains('on')) {
-      btn.classList.remove('on');
-      if (autoCut) { autoCut = false; if (view3.cut) document.getElementById('tbCut').click(); }
-      setView('iso');
-    } else { focusConnector(); btn.classList.add('on'); }
-  });
-  document.getElementById('viewpad').addEventListener('click', e => { if (e.target.closest('[data-view]')) btn.classList.remove('on'); });
-  document.getElementById('tbCut').addEventListener('click', () => { if (!view3.cut) btn.classList.remove('on'); });
-}
+// Base section button: a view like the others, the cutaway close on the base the Lamp tab opens with.
+document.getElementById('vpBaseCut').addEventListener('click', focusConnector);
 
 // toolbar
 const tb = (id, key) => document.getElementById(id).addEventListener('click', e => { view3[key] = !view3[key]; e.currentTarget.classList.toggle('on', view3[key]); if (key === 'cut') applyCut(); invalidate(); });
