@@ -110,6 +110,11 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .panel h3.collapsed::before { transform: rotate(-90deg); }
 .panel h3:hover { color: var(--text); }
 .grpbody.collapsed { display: none; }
+.grp { border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; margin: 10px 0; }
+.grp:has(> h3[hidden]) { display: none; }
+.grp > h3 { margin: 0 -10px; padding: 11px 10px; border-radius: 9px; }
+.grp > h3:not(.collapsed) { color: var(--text); border-bottom: 1px solid var(--line); border-radius: 9px 9px 0 0; margin-bottom: 4px; }
+.grp > .grpbody { padding-bottom: 4px; }
 .presetrow { display: flex; gap: 6px; align-items: center; }
 .presetrow select { flex: 1; min-width: 0; }
 .presetrow button { flex: none; padding: 4px 6px; display: grid; place-items: center; }
@@ -2183,7 +2188,6 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Holder body Ø', 'socketD', 20, 60, 0.5, 'mm', holderOn);
   slider(p, 'Plate thickness', 'plateT', 1.6, 6, 0.1, 'mm', holderOn);
   note(p, 'Measure the outside of your holder’s thread with calipers and add ~0.5 mm. Keep the plate thin enough (≤ 3 mm) to leave thread for the shade ring.', holderOn);
-  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
 
   h3(p, 'Shade ring', ringOn);
   segmented(p, 'Style', 'ringStyle', { spokes: 'Spokes', disc: 'Solid disc' }, ringOn);
@@ -2210,6 +2214,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
 
   h3(p, 'Cable & cover', tableBase);
+  slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
   slider(p, 'Cable channel', 'cableW', 3, 12, 0.5, 'mm', tableBase);
   toggleRow(p, 'Cable grip', 'cableGrip', tableBase);
   note(p, 'Round snap-in beads along the bottom of the cable channel leave an opening 0.6 mm narrower than the cable Ø: press the cable up past them and it clicks in and can’t drop out, and pulls out again without damage.', () => tableBase() && P.cableGrip);
@@ -2309,7 +2314,9 @@ const FILAMENTS = [['White', '#f5f5f2'], ['Natural', '#f2ede4'], ['Beige', '#d9c
   for (const panel of document.querySelectorAll('.panel, .sub')) for (const h of [...panel.querySelectorAll(':scope > h3')]) {
     const body = document.createElement('div'); body.className = 'grpbody';
     while (h.nextElementSibling && !h.nextElementSibling.matches('h3')) body.append(h.nextElementSibling);
-    h.after(body);
+    // heading and body sit in one bordered card so neighbouring open groups don't run together
+    const grp = document.createElement('section'); grp.className = 'grp';
+    h.before(grp); grp.append(h, body);
     const id = panel.id + ':' + h.firstChild.textContent;
     const set = on => { h.classList.toggle('collapsed', on); body.classList.toggle('collapsed', on); };
     set(!!folded[id]);
