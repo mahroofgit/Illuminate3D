@@ -1371,7 +1371,17 @@ function shellCavity(B, Rmax, seg) {
   for (const a of shellRibAngles(B)) keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), a));
   const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;   // cable channel with a wall round it
   keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
-  return sub(cav, uni(keepOut));
+  // A breather hole up through the floor into each pocket between the ribs: no pocket is sealed, so trapped air can
+  // get out and slicers don't take a closed pocket for a separate object ("split to objects" would lift it out).
+  const walls = [0, ...shellRibAngles(B)].map(a => ((a % 360) + 360) % 360).sort((a, b) => a - b), holes = [];
+  walls.forEach((a, i) => {
+    const am = (a + (((walls[(i + 1) % walls.length] - a) + 360) % 360 || 360) / 2) * DEG;
+    const rOut = surf(am, zf) - tt, hr = 1.5;
+    if (rOut - Rc < 2 * hr + 1.5) return;
+    const r = (Rc + rOut) / 2;
+    holes.push(tr(cyl(zf + 2, hr, hr, 24), r * Math.cos(am), r * Math.sin(am), -1));
+  });
+  return holes.length ? uni([sub(cav, uni(keepOut)), ...holes]) : sub(cav, uni(keepOut));
 }
 // Air vents through a hollow base: a hole slanting up and in through the outer shell into the void (so you can't see
 // in from the side), and a level hole through the chamber wall into the funnel at each vent, above the floor and the
