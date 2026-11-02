@@ -104,7 +104,7 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: v
 .ctl .lim .warn { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: 4px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800; vertical-align: 1px; }
 #tipbox { position: fixed; z-index: 30; max-width: 300px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 12px; line-height: 1.4; pointer-events: none; display: none; }
 .ctl[hidden], .card[hidden], h3[hidden] { display: none !important; }
-.partbar { margin: 4px 0 6px; } .partbar button { padding: 7px 2px; font-size: 13px; font-weight: 600; }
+.partbar { margin: 4px 0 6px; } .partbar[hidden] { display: none; } .partbar button { padding: 7px 2px; font-size: 13px; font-weight: 600; }
 .panel h3 { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0; }
 .panel h3::before { content: ''; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; margin-right: 7px; transition: transform .15s; flex: none; }
 .panel h3.collapsed::before { transform: rotate(-90deg); }
@@ -389,7 +389,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, combine: false, hollow: false, hollowT: 2, hollowRibs: 6, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.1,
@@ -763,16 +763,7 @@ function diffuserSolid(S, seg) {
   const g = diffuserGeom(S), N = S.N, M = S.M, NM = N * M;
   if (g.zTop > S.zEnd - 2) return null;
   // filled solid inside the shade's outer surface (plus the collar), used to trim the cone into the wall
-  const v = new Float32Array(NM * 3 + 6); v.set(S.pos.subarray(0, NM * 3));
-  v.set([0, 0, S.rowZ[0], 0, 0, S.rowZ[M - 1]], NM * 3);
-  const BC = NM, TC = NM + 1, tri = [];
-  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
-    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
-    tri.push(a, b, c, a, c, d);
-  }
-  const top = (M - 1) * N;
-  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
-  const inList = [keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), cyl(P.collarH + 0.5, P.collarD / 2 + P.collarWall, P.collarD / 2 + P.collarWall, seg)];
+  const inList = [shadeFill(S), cyl(P.collarH + 0.5, P.collarD / 2 + P.collarWall, P.collarD / 2 + P.collarWall, seg)];
   const inside = uni(inList);
   const Rb = g.rAtt + 2 * Math.max(P.wall, P.collarWall) + 2;
   let sheet = g.flat ? tr(cyl(P.diffT, Rb, Rb, seg), 0, 0, g.zLow)
@@ -796,34 +787,30 @@ function diffuserSolid(S, seg) {
   } else if (P.diffVent > 0) sheet = sub(sheet, tr(cyl(g.zTop + 10, P.diffVent / 2, P.diffVent / 2, 48), 0, 0, -5));   // centre vent hole
   return keep(sheet.intersect(inside));
 }
-// Shade bottom. 'plate': the shade's outside stays exactly as designed (shape, twist, pattern) right down to the bed,
-// and a flat plate inside joins it to the collar. The base's top above a small step (zL, just under the collar's floor)
-// becomes a plain neck that keeps the usual wall around the twist-lock grooves; the shade's wall comes down around it
-// with radial clearance and turns freely with the lock. 'neck': the body narrows down into the collar instead (for
-// shades whose bottom is too narrow to fit around the base's neck). 'auto' picks the plate whenever it fits.
-// (Projects saved with the old skirt switch on keep the plate.)
-// Base and shade printed as one body (table base, no diffuser): no twist lock; the shade's wall rises straight off the
-// base's top, which is locked to the shade's bottom so the outside runs on without a seam.
-const combined = () => P.combine && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !diffuserOn();
-const skirtOn = () => P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !combined()
-  && (P.skirt === true || P.skirtMode === 'plate' || (P.skirtMode === 'auto' && plateFits()));
+// Table lamps are built around one hardware chamber: a plain cylinder holding the light source, cable channel and
+// cover, sized from them (and, for two parts, the twist-lock socket on top). The outer walls are free shapes tied to it.
+// Two parts: the base is a shell of its own shape around the chamber, with ribs; the chamber's top above a small step
+// (zL) is the neck the shade twists onto. The shade's outside runs as designed down to its bed, and a plate inside joins
+// it to its collar. One body: the shade's own outline runs down to the bed, the chamber stands inside its bottom, tied
+// to the wall by ribs and a floor (no base shape, no twist lock). Not with a diffuser, which has to go in from below.
+const combined = () => P.parts === 'one' && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !diffuserOn();
+const skirtOn = () => P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !combined();
 const flatSkirtOn = skirtOn;
 function skirtDims(B) {
-  const Rneck = B.gr1 + 3, Rni = Rneck + 0.6;   // neck outside / shade wall inside (0.6 mm turning clearance)
+  const Rneck = B.Rch, Rni = Rneck + 0.6;   // neck (the chamber's top) outside / shade wall inside (0.6 mm turning clearance)
   return { Rneck, Rni, zL: B.f - 0.6 };
 }
-// Narrowest inside radius of the shade's wall from the bed up to just over the plate, if the body ran to the bed.
+// Narrowest inside radius of the shade's wall from the bed up to zTop (just over the plate, or the chamber's top).
 // Cached, since the panels ask on every refresh.
 let sbiKey = '', sbiVal = 0;
-function shadeBottomInner() {
-  const key = JSON.stringify([P.profile, P.curve, P.smooth, P.height, P.width, P.aspect, P.sides, P.round, P.twist, P.twistStyle, P.wall, P.pat, P.fadeConn, P.collarH, P.skirtPlateT]);
+function shadeBottomInner(zTop) {
+  const key = JSON.stringify([P.profile, P.curve, P.smooth, P.height, P.width, P.aspect, P.sides, P.round, P.twist, P.twistStyle, P.wall, P.pat, P.fadeConn, zTop]);
   if (key === sbiKey) return sbiVal;
   const prof = buildProfile(), n = prof.length - 1, H = P.height, W = P.width;
   const pr = t => { const x = Math.min(n, Math.max(0, t * n)), i = Math.min(n - 1, Math.floor(x)); return (prof[i] + (prof[i + 1] - prof[i]) * (x - i)) * W; };
   let Rm = 0; for (let i = 0; i <= n; i++) Rm += prof[i] * W; Rm /= n + 1;
   const shapeF = makeShapeF(), patt = makePattern(Rm), twR = P.twist * DEG;
   const twAt = t => P.twistStyle === 'ease' ? twR * t * t * (3 - 2 * t) : P.twistStyle === 'wave' ? twR * Math.sin(Math.PI * t) : twR * t;
-  const zTop = P.collarH + P.skirtPlateT + 1;
   let lo = 1e9;
   for (let k = 0; k <= 6; k++) {
     const z = zTop * k / 6, t = z / H, base = pr(t), tw = twAt(t);
@@ -838,9 +825,10 @@ function shadeBottomInner() {
   sbiKey = key; sbiVal = lo;
   return lo;
 }
-function plateFits() {
-  const Ro = P.collarD / 2 + P.collarWall, Rni = Ro + P.lugDepth + P.clearance + 3.6;
-  return shadeBottomInner() >= Rni + 0.5;
+// Smallest inside radius the shade's bottom may have: clear of the base's neck (two parts) or of the chamber (one body),
+// over the height it has to clear.
+function shadeMinNeed(B = baseDims()) {
+  return combined() ? { r: B.Rch + 1.5, z: B.H } : { r: B.Rch + 0.6 + 0.5, z: P.collarH + P.skirtPlateT + 1 };
 }
 // radius of the shade's wall (outside, or inside) at height z in column j, rows interpolated
 function wallAt(S, z, j, inner) {
@@ -996,7 +984,11 @@ function baseDims() {
     H = Math.max(P.baseH, minH); f = H - boreDepth;
     Rt = Math.max(P.baseTopD / 2, ringMin); Rb = Math.max(P.baseD / 2, 20);
   }
-  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
+  // hardware chamber: wall round the light-source cavity and cover, and round the twist-lock grooves when there are any
+  const part = { Ri, Ro, c, adapter, insert, f: 0 };
+  const Rch = adapter ? Rt : Math.max(Math.max(baseFeatureR(part), coverActive(part) ? coverOuter(part) : 0) + P.chamberWall, comb ? 0 : gr1 + 3);
+  if (comb) { H = minH; f = H; Rt = Rb = Rch; }   // one body: the chamber is all there is below the shade
+  return { Ri, Ro, c, boreR, gr1, boreDepth, adapter, insert, H, f, Rt, Rb, Rch, minH, minParts, minHClamped: !adapter && H > P.baseH, ringClamped: !adapter && Rt > P.baseTopD / 2 };
 }
 
 // ---------------------------------------------------------------- dependent limits
@@ -1018,7 +1010,7 @@ function baseFeatureR(B) {   // widest internal cut below the twist-lock floor
 const fmt = v => +(+v).toFixed(1);
 // Base top locked to the shade's bottom: the base's Top Ø is the shade's bottom outline Ø, and setting either one
 // moves the other (the base slider moves the profile's bottom point), so the two always meet edge to edge.
-const baseLocked = () => (P.baseLock || combined()) && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter';
+const baseLocked = () => P.baseLock && !combined() && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter';
 const shadeBottomD = () => buildProfile()[0] * 2 * P.width;
 function setShadeBottomD(D) {
   const pts = P.profile; let i0 = 0;
@@ -1028,7 +1020,21 @@ function setShadeBottomD(D) {
     pts[i0][1] = Math.round(pts[i0][1] * D / cur * 100) / 100;
   }
 }
-function shapeMin() { const f = makeShapeF(); let m = 1e9; for (let k = 0; k < 360; k++) m = Math.min(m, f(TAU * k / 360)); return m; }
+function shapeMin(f = makeShapeF()) { let m = 1e9; for (let k = 0; k < 360; k++) m = Math.min(m, f(TAU * k / 360)); return m; }
+const baseShapeMin = () => P.baseStyle === 'plain' ? 1 : shapeMin(P.baseStyle === 'match' ? makeShapeF() : makeShapeF(P.baseSides, P.baseRound, 1));
+// The shade's bottom is held wide enough for the chamber: the profile's bottom point moves out (flag for the checks).
+let shadeHeld = false;
+function holdShadeBottom() {
+  shadeHeld = false;
+  if (!(P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter')) return false;
+  const need = shadeMinNeed(), pts = P.profile; let i0 = 0;
+  for (let i = 1; i < pts.length; i++) if (pts[i][0] < pts[i0][0]) i0 = i;
+  for (let it = 0; it < 8; it++) {
+    const d = need.r - shadeBottomInner(need.z); if (d <= 0.01) break;
+    pts[i0][1] = Math.round((pts[i0][1] + d / P.width / shapeMin() + 0.05) * 100) / 100; shadeHeld = true;
+  }
+  return shadeHeld;
+}
 const LIMITS = {
   collarWall: () => [Math.max(1.6, P.wall), 5, `the collar should be at least as thick as the shade wall (${fmt(P.wall)} mm) so the joint isn't the weak point.`],
   cableW: () => [P.cableD + (P.cableGrip && baseInsert() !== 'socket' ? 1.6 : 0.5), 12, P.cableGrip ? `the cable (${fmt(P.cableD)} mm) has to fit above the snap-in lips.` : `the channel must be a little wider than the ${fmt(P.cableD)} mm cable.`],
@@ -1045,29 +1051,19 @@ const LIMITS = {
     return [Math.max(30, lo), 160, ins === 'socket' ? `the collar has to clear the Ø${fmt(P.holeD)} socket.` : `the puck (Ø${fmt(ins === 'puck' ? P.puckD : P.slotD)}) has to fit inside the collar.`];
   },
   baseTopD: () => {
-    const B = baseDims();
-    if (combined()) return [2 * (baseFeatureR(B) + 2.4 + P.wall) / shapeMin(), 240, `the shade’s wall has to stand on the base’s top outside the ${B.insert === 'socket' ? 'holder opening' : 'puck opening'}.`];
-    let lo = 2 * (B.gr1 + 3), why = `the top keeps 3 mm of wall around the twist-lock grooves. Lower the collar Ø to make the base narrower.`;
-    const sd = skirtDims(B);
-    if (skirtOn()) { lo = Math.max(lo, 2 * (sd.Rni + 2)); why = `the step under the shade needs room for the shade’s wall outside the base’s neck.`; }
-    if (baseLocked() && P.skirtMode !== 'neck') {   // locked to the shade's bottom: keep that wide enough for the inner plate
-      const plate = 2 * (sd.Rni + 0.5 + P.wall * 1.15) / shapeMin();
-      if (plate > lo) { lo = plate; why = `it’s locked to the shade’s bottom, which has to stay wide enough for the inner plate to fit around the base’s neck (so the shade needs no neck).`; }
-    }
-    return [lo, 240, why];
+    const B = baseDims(), m = baseShapeMin(), sd = skirtDims(B);
+    // the step the shade's wall comes down onto, outside the neck; the shell round the chamber
+    const step = 2 * (sd.Rni + 2) / m, shell = 2 * (B.Rch + P.hollowT + 1.5) / m;
+    return [Math.max(step, shell), 240, step >= shell ? `the step under the shade needs room for the shade’s wall outside the base’s neck (the hardware chamber, Ø${fmt(2 * B.Rch)}).` : `the base’s shell has to fit round the hardware chamber (Ø${fmt(2 * B.Rch)}).`];
   },
   baseH: () => { const B = baseDims(); return [B.minH, 150, `the base has to hold ${B.minParts} mm.`]; },
   baseD: () => {
     // an overhanging side isn't limited here: it's shown red and listed in the checks, so the shape stays yours
-    const B = baseDims(), wall = baseFeatureR(B) + 2.4;
-    // the side is a straight taper, so it must also still be ≥ groove radius + 3 mm at the twist-lock floor height
-    // (with the inner plate the plain neck above the step keeps that wall)
-    const t = B.f / B.H, need = B.gr1 + 3, groove = skirtOn() || combined() ? 0 : t < 1 ? (need - B.Rt * t) / (1 - t) : need;
+    const B = baseDims(), shell = (B.Rch + P.hollowT + 1.5) / baseShapeMin();
     const grip = !B.adapter && P.cableGrip ? gripStart(B) + GRIP_MIN + 2 + P.footChamfer : 0;
-    const lo = Math.max(wall, coverActive(B) ? coverOuter(B) + 2.4 : 0, grip, groove, 20);
-    const why = lo === groove ? `the tapered side has to stay 3 mm thick around the twist-lock grooves near the floor.`
-      : lo === grip ? `the cable channel needs room for the snap-in grip between the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} and the rim.`
-      : `the bottom keeps a wall around the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} inside.`;
+    const lo = Math.max(shell, grip, 20);
+    const why = lo === grip ? `the cable channel needs room for the snap-in grip between the ${B.insert === 'socket' ? 'holder cavity' : 'puck opening'} and the rim.`
+      : `the base’s shell has to fit round the hardware chamber (Ø${fmt(2 * B.Rch)}).`;
     return [2 * lo, 240, why];
   },
 };
@@ -1080,7 +1076,7 @@ function designState() { const d = clone(P); if (intent) for (const k in intent)
 const designJSON = () => JSON.stringify(designState());
 function applyConstraints() {
   if (!intent) initIntent();
-  let changed = false;
+  let changed = holdShadeBottom();
   if (baseLocked()) intent.baseTopD = Math.round(shadeBottomD() * 100) / 100;
   for (const k in LIMITS) {
     const [lo, hi0] = LIMITS[k](), hi = Math.max(lo, hi0), v = intent[k], cur0 = getK(k);
@@ -1245,7 +1241,7 @@ function baseSurface(B) {
   // the shade's body starts on its bed with the inner plate or as one body (base z = f), above the collar otherwise
   const zs0 = f + (skirtOn() || combined() ? 0 : P.collarH);
   const twAt = z => match ? slope * (z - zs0) / Hs : P.baseTwist * DEG * z / H;
-  const inner = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0), need = z => (z >= f - 0.5 && !combined() ? B.gr1 : inner) + 2.4;
+  const need = () => B.Rch + P.hollowT;   // never inside the chamber and its shell
   // the pattern grows out of the plain bottom edge no steeper than the overhang limit (smoothstep peaks at 1.5× its mean slope)
   const depth = patt ? k * Object.values(P.pat).reduce((m, q) => m + (q.on && q.depth > 0 ? q.depth : 0), 0) : 0;
   const fadeB = Math.max(P.baseFade, 1.5 * depth / Math.tan(Math.max(10, P.overhang - 10) * DEG));
@@ -1286,62 +1282,83 @@ function baseOuter(B, seg) {
   return { man: keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) }))), Rmax };
 }
 
-// Hollow base: the solid between the outside and the hardware chamber becomes a closed void, leaving an outer shell,
-// a floor, a roof and a chamber wall around the light source, all `hollowT` thick, with radial ribs tying the shell to
-// the chamber wall. The void is round (the largest circle inside the outside at each height), so shaped bases keep
-// their corners solid. Its roof has 45° chamfers along both walls and bridges the rest; the ribs shorten that bridge.
-// The cable channel and any intake holes keep a full wall around them.
-const hollowOn = () => P.hollow && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter';
-function hollowGeom(B) {
-  const t = P.hollowT, surf = baseSurface(B), comb = combined();
-  // as one body the void can stay open at the top, into the shade: no roof to bridge, the ribs hold the chamber wall
-  const zTop = comb ? B.H : Math.min(skirtOn() ? skirtDims(B).zL : B.H, B.f) - t, zf = t;
-  const rI = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0) + t;
-  const rO = z => { let m = 1e9; for (let k = 0; k < 180; k++) m = Math.min(m, surf(TAU * k / 180, z)); return m - t; };
-  // the band of heights (from the floor up) where the void is at least 3 mm wide
-  const n = Math.max(2, Math.ceil((zTop - zf) / 1.5)), pts = [];
-  for (let i = 0; i <= n; i++) { const z = zf + (zTop - zf) * i / n, r = rO(z); if (r - rI < 3) break; pts.push([r, z]); }
-  if (pts.length < 3) return null;
-  const open = comb && pts.length === n + 1;   // open only if the void reaches the top at full width
-  if (comb && !open) while (pts.length > 2 && pts[pts.length - 1][1] > B.H - t) pts.pop();   // closed: keep a roof
-  return { t, rI, zf, pts, open };
-}
-function hollowCavity(B, Rmax, seg) {
-  const g = hollowGeom(B); if (!g) return null;
-  const { t, rI, zf, pts, open } = g, wTop = pts[pts.length - 1][0] - rI;
-  if (open) pts.push([pts[pts.length - 1][0], B.H + 1]);   // runs on out through the top
-  const zc = pts[pts.length - 1][1];
-  const h = open ? 0 : Math.max(0, Math.min(wTop / 2 - 0.5, zc - zf - 2));   // roof chamfers
-  const poly = [[rI, zf]];
-  for (const [r, z] of pts) if (z <= zc - h + 1e-6) poly.push([r, z]);
-  const rAt = z => { for (let i = 1; i < pts.length; i++) if (pts[i][1] >= z) { const [r0, z0] = pts[i - 1], [r1, z1] = pts[i]; return r0 + (r1 - r0) * (z - z0) / Math.max(1e-6, z1 - z0); } return pts[pts.length - 1][0]; };
-  if (h > 0) poly.push([rAt(zc - h), zc - h], [rAt(zc - h) - h, zc], [rI + h, zc], [rI, zc - h]);
-  else poly.push([rI, zc]);
-  let cav = revolve(poly, 360, seg);
-  const keepOut = [];
-  for (let k = 0; k < P.hollowRibs; k++) {   // ribs between the chamber wall and the shell, clear of the cable channel at 0°
-    const a = (k + 0.5) * 360 / P.hollowRibs;
-    keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), a));
+// Base shell (two parts): the base is a shell of its own outside, `hollowT` thick, with a floor, round the chamber.
+// The void between them follows the outside (shape, twist and pattern), and its roof under the step has 45° chamfers
+// along both walls, bridging the rest; radial ribs tie the shell to the chamber and shorten that bridge. The cable
+// channel and any air intakes keep a full wall round them.
+function shellCavity(B, Rmax, seg) {
+  const t = P.hollowT, surf = baseSurface(B), zf = t, zc = skirtDims(B).zL - t;
+  if (zc - zf < 3) return null;
+  const h = Math.min(8, (zc - zf) / 2), lean = Math.abs(B.Rt - B.Rb) / Math.max(1, zc + t), tt = t * Math.sqrt(1 + lean * lean);
+  const N = Math.max(128, seg * 2), zs = [];
+  const nz = Math.max(3, Math.ceil((zc - zf) / 0.6));
+  for (let i = 0; i <= nz; i++) zs.push(zf + (zc - zf) * i / nz);
+  zs.push(zc - h); zs.sort((a, b) => a - b);
+  const M = zs.length, NM = N * M, v = new Float32Array(NM * 3 + 6);
+  for (let i = 0; i < M; i++) {
+    const z = zs[i], pull = Math.max(0, z - (zc - h));   // the outer chamfer: the wall steps in 45° under the roof
+    for (let j = 0; j < N; j++) {
+      const a = TAU * j / N, r = Math.max(1, surf(a, z) - tt - pull), q = (i * N + j) * 3;
+      v[q] = r * Math.cos(a); v[q + 1] = r * Math.sin(a); v[q + 2] = z;
+    }
   }
-  if (!B.adapter) {   // the cable channel (and the ramp over the cover) with a wall round it
-    const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;
-    keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
+  v.set([0, 0, zf, 0, 0, zc], NM * 3);
+  const BC = NM, TC = NM + 1, tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d);
   }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
+  const cav = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
+  // the chamber with its own 45° chamfer under the roof
+  const keepOut = [revolve([[0, zf - 1], [B.Rch, zf - 1], [B.Rch, zc - h], [B.Rch + h + 1, zc + 1], [0, zc + 1]], 360, seg)];
+  for (let k = 0; k < P.hollowRibs; k++) {   // ribs from the chamber to the shell, clear of the cable channel at 0°
+    keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), (k + 0.5) * 360 / P.hollowRibs));
+  }
+  const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;   // cable channel with a wall round it
+  keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
   keepOut.push(...intakeHoles(B, Rmax, t));
-  return keepOut.length ? sub(cav, uni(keepOut)) : cav;
+  return sub(cav, uni(keepOut));
+}
+// Solid filling the shade's outer surface (rows from S), for trimming things into its wall.
+function shadeFill(S) {
+  const N = S.N, M = S.M, NM = N * M;
+  const v = new Float32Array(NM * 3 + 6); v.set(S.pos.subarray(0, NM * 3));
+  v.set([0, 0, S.rowZ[0], 0, 0, S.rowZ[M - 1]], NM * 3);
+  const BC = NM, TC = NM + 1, tri = [];
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const j1 = (j + 1) % N, a = i * N + j, b = i * N + j1, c = (i + 1) * N + j1, d = (i + 1) * N + j;
+    tri.push(a, b, c, a, c, d);
+  }
+  const top = (M - 1) * N;
+  for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; tri.push(j, BC, j1, top + j, top + j1, TC); }
+  return keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: v, triVerts: new Uint32Array(tri) })));
+}
+// One body: the chamber standing on the bed inside the shade, tied to its wall by a floor and ribs (trimmed to the
+// wall, so they fuse with it whatever its shape). With the wall, it's the whole printed body.
+function chamberBody(B, S, seg, withWall) {
+  const t = P.hollowT, fill = shadeFill(S), big = S.maxR + 5;
+  const ties = [cyl(t, big, big, seg)];
+  for (let k = 0; k < P.hollowRibs; k++) ties.push(rotZ(tr(box(big, t, B.H), 0, -t / 2, 0), (k + 0.5) * 360 / P.hollowRibs));
+  const list = [cyl(B.H, B.Rch, B.Rch, seg), keep(fill.intersect(uni(ties)))];
+  if (withWall) list.push(keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx }))));
+  return uni(list);
 }
 
-function buildBase(seg) {
-  const B = baseDims(), { H, f } = B;
-  const styled = !B.adapter && P.baseStyle !== 'plain' ? baseOuter(B, seg) : null;
+function buildBase(seg, S = null, withWall = false) {
+  const B = baseDims(), { H, f } = B, comb = combined();
+  if (comb && !S) S = buildShade(128, 0.6);
+  const styled = !B.adapter && !comb && P.baseStyle !== 'plain' ? baseOuter(B, seg) : null;
   const zTop = skirtOn() ? skirtDims(B).zL : H, topPts = zTop < H ? [[B.Rt, zTop], [B.Rt, H], [0, H]] : [[B.Rt, H], [0, H]];
   let body = styled ? styled.man : B.adapter ? cyl(H, B.Rt, B.Rt, seg) : revolve([...(P.footChamfer > 0 ? [[0, 0], [B.Rb - P.footChamfer, 0], [B.Rb, P.footChamfer]] : [[0, 0], [B.Rb, 0]]), ...topPts], 360, seg);
-  const Rmax = styled ? styled.Rmax : Math.max(B.Rb, B.Rt);   // outermost surface, for cuts that run out through the side
+  if (comb) body = chamberBody(B, S, seg, withWall);
+  const Rmax = comb ? S.maxR + 2 : styled ? styled.Rmax : Math.max(B.Rb, B.Rt);   // outermost surface, for cuts that run out through the side
   if (skirtOn()) {   // neck under the shade's skirt: full outline up to the step, then a plain cylinder to the top
     const sd = skirtDims(B);
     body = keep(body.intersect(uni([cyl(sd.zL, Rmax + 5, Rmax + 5, seg), tr(cyl(H - sd.zL + 1, sd.Rneck, sd.Rneck, seg), 0, 0, sd.zL - 0.01)])));
   }
-  if (hollowOn()) { const cav = hollowCavity(B, Rmax, seg); if (cav) body = sub(body, cav); }
+  if (skirtOn()) { const cav = shellCavity(B, Rmax, seg); if (cav) body = sub(body, cav); }
   const cut = combined() ? [] : [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
   const ca = (B.c / B.Ro) / DEG + 0.6;
@@ -1615,8 +1632,8 @@ function update() {
     else if (c) addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat);
     if (c) connVol = c.volume();
     if (P.mount === 'twist') {
-      const b = buildBase(96), g = manifoldToGeo(b);
-      baseOv = B.adapter ? null : baseOverhang(g, B);
+      const b = buildBase(96, S), g = manifoldToGeo(b);
+      baseOv = B.adapter || combined() ? null : baseOverhang(g, B);
       addSolid(baseGroup, g, baseOv ? baseOvMat : baseMat, capBaseMat); baseVol = b.volume(); baseBox = b.boundingBox();
     }
     if (P.mount === 'twist' && coverActive(B)) {
@@ -1629,8 +1646,8 @@ function update() {
   // place parts (assembly coords: base print frame, Z up)
   const twist = P.mount === 'twist', comb = combined();
   const ex = view3.explode && twist && !comb ? 60 : 0;   // one body: nothing to pull apart (the cover still drops)
-  shadeGroup.position.set(0, 0, twist ? B.f + ex : 0);
-  shadeGroup.rotation.z = twist && (!view3.explode || comb) ? -P.turn * DEG : 0;
+  shadeGroup.position.set(0, 0, twist && !comb ? B.f + ex : 0);   // one body: the shade itself stands on the bed
+  shadeGroup.rotation.z = twist && !comb && !view3.explode ? -P.turn * DEG : 0;
   assembly.rotation.x = P.orient === 'pendant' ? Math.PI : 0;
   shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw; coverGroup.visible = view3.cover;
 
@@ -1673,12 +1690,12 @@ function update() {
   const shadeG = (meshVolume(S.pos, S.idx) + connVol) / 1000 * dens;
   const checks = [];
   checks.push([ov.badPct < 0.5, ov.badPct < 0.5 ? `Prints without supports (max overhang ${ov.maxOver.toFixed(0)}° ≤ ${P.overhang}°)` : `${ov.badPct.toFixed(1)}% of the wall is steeper than ${P.overhang}° (shown red)`]);
-  const fits = comb ? Math.max(shadeW, 2 * Math.max(B.Rb, B.Rt)) <= Math.min(pr.x, pr.y) && B.H + shadeH <= pr.z : shadeW <= Math.min(pr.x, pr.y) && shadeH <= pr.z;
+  const fits = shadeW <= Math.min(pr.x, pr.y) && shadeH <= pr.z;
   if (baseOv && baseOv.bad > 0.5) checks.push([false, `The base’s side leans out up to ${baseOv.max.toFixed(0)}°, past your ${P.overhang}° limit (shown red) — widen the bottom Ø or narrow the top`]);
-  if (comb) checks.push([fits, fits ? `Base and shade print as one body, ${(B.H + shadeH).toFixed(0)} mm tall, on the ${pr.label.split(' (')[0]}` : `The one-piece lamp (${(B.H + shadeH).toFixed(0)} mm tall) doesn’t fit the ${pr.label} — turn off One body, or make it smaller`]);
+  if (comb) checks.push([fits, fits ? `Prints as one body, ${shadeH.toFixed(0)} mm tall, on the ${pr.label.split(' (')[0]}` : `The one-piece lamp (Ø${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm) doesn’t fit the ${pr.label}`]);
   else checks.push([fits, fits ? `Shade fits the ${pr.label.split(' (')[0]} bed` : `Shade ${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm exceeds the ${pr.label}`]);
-  if (P.combine && tableBase() && diffuserOn()) checks.push([false, 'One body is off while the diffuser is on — the diffuser has to go in from below, so base and shade print apart']);
-  if (hollowOn()) { const hg = hollowGeom(B); checks.push(hg ? [true, `Hollow base: ${fmt(P.hollowT)} mm shell, ${P.hollowRibs} ribs to the chamber wall`] : [false, 'Hollow base: no room for a void between the outside and the hardware chamber — widen the base or thin the shell']); }
+  if (P.parts === 'one' && tableBase() && diffuserOn()) checks.push([false, 'One body is off while the diffuser is on — the diffuser has to go in from below, so the lamp prints in two parts']);
+  if (shadeHeld) checks.push([true, `Shade’s bottom held at the minimum for the hardware chamber (Ø${fmt(2 * B.Rch)}) — the profile’s bottom point moved out`]);
   const plate = plateParts(B, shadeW / 2);
   if (fits && plate.length > 1) {
     const ok = !!packBed(plate, pr.x, pr.y);
@@ -1711,7 +1728,7 @@ function update() {
       const sd = skirtDims(B); let lo = 1e9;
       for (let i = 0; i < S.M && S.rowZ[i] <= P.collarH; i++) lo = Math.min(lo, S.rowMinIn[i]);
       checks.push(lo >= sd.Rni ? [true, `Inner plate: the outside follows your design right down to the bed, ${fmt(lo - sd.Rneck)} mm clear of the base neck`]
-        : [false, `The shade’s inside comes within ${fmt(Math.max(0, lo - sd.Rneck))} mm of the base neck (needs 0.6) — widen the shade’s bottom or set Bottom to Neck`]);
+        : [false, `The shade’s inside comes within ${fmt(Math.max(0, lo - sd.Rneck))} mm of the base neck (needs 0.6) — widen the shade’s bottom`]);
     }
     if (intakeOn()) {
       const hs = intakeLayout(B), lo = Math.min(...hs.map(h => h.g.th / DEG)), hi = Math.max(...hs.map(h => h.g.th / DEG));
@@ -1741,9 +1758,9 @@ function update() {
   // per-part lines, then the assembled lamp: total height with the shade locked on, widest part and all the filament
   const baseG = baseVol / 1000 * dens, coverG = coverVol / 1000 * dens, baseW = baseBox ? 2 * Math.max(B.Rt, B.Rb) : 0;
   const rows = [['Shade', `Ø${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm`, shadeG]];
-  if (baseBox) rows.push([B.adapter ? 'Adapter' : 'Base', `Ø${baseW.toFixed(0)} × ${B.H.toFixed(0)} mm`, baseG]);
+  if (baseBox) rows.push([B.adapter ? 'Adapter' : combined() ? 'Chamber' : 'Base', `Ø${baseW.toFixed(0)} × ${B.H.toFixed(0)} mm`, baseG]);
   if (coverVol) rows.push(['Cover', '', coverG]);
-  const totH = baseBox && !B.adapter ? Math.max(B.H, B.f + shadeH) : shadeH;
+  const totH = baseBox && !B.adapter && !combined() ? Math.max(B.H, B.f + shadeH) : shadeH;
   document.getElementById('dims').innerHTML = rows.map(([n, d, g]) => `<div><span>${n}</span><span>${d}</span><span>≈${g.toFixed(0)} g</span></div>`).join('') +
     `<div class="tot"><span>Total</span><span>${totH.toFixed(0)} mm tall · Ø${Math.max(shadeW, baseW).toFixed(0)} max</span><span>≈${(shadeG + baseG + coverG).toFixed(0)} g ${P.material}</span></div>`;
   document.getElementById('expBase').hidden = !twist || combined();
@@ -1834,7 +1851,7 @@ function packBed(items, bx, by, gap = 6, edge = 5) {
 }
 const footR = m => { const v = m.getMesh().vertProperties; let r = 0; for (let i = 0; i < v.length; i += 3) r = Math.max(r, Math.hypot(v[i], v[i + 1])); return r; };
 function plateParts(B, shadeR) {   // footprint radii from the preview (parts are all centred on the axis)
-  const comb = combined(), parts = [{ name: comb ? 'body' : 'shade', r: comb ? Math.max(shadeR, B.Rt, B.Rb) : shadeR }];
+  const comb = combined(), parts = [{ name: comb ? 'body' : 'shade', r: shadeR }];
   if (P.mount === 'twist') {
     if (!comb) parts.push({ name: 'base', r: Math.max(B.Rt, B.Rb) });
     if (coverActive(B)) { const k = coverShape(B); parts.push({ name: 'cover', r: k.rect ? Math.hypot(k.hx, k.hw) : k.R + 1.2 }); }
@@ -2131,7 +2148,6 @@ function card(parent, title, key, when) {
 }
 
 function sideEffects(key) {
-  if (key === 'skirtMode') P.skirt = false;
   if (key === 'baseTopD' && baseLocked()) setShadeBottomD(P.baseTopD);   // the shade's bottom follows the base top   // the old skirt switch no longer overrides once Bottom is chosen
   if (key === 'fitting' && FITTINGS[P.fitting].hole) { P.holeD = FITTINGS[P.fitting].hole; P.socketD = FITTINGS[P.fitting].bodyD; }
   if (key === 'holeD' || key === 'socketD') P.fitting = 'custom';
@@ -2149,7 +2165,14 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
 // Shape tab
 {
   const tab = document.getElementById('p-shape');
-  // Shade / Base switch: the base only has a shape of its own when the lamp twists onto a table base
+  // One body / two parts at the very top (table lamps), then the Shade / Base switch when there's a base to shape
+  segmented(tab, 'Print as', 'parts', { two: 'Two parts', one: 'One body' }, tableBase);
+  note(tab, '<b>Two parts</b>: a shade that twists onto a base. The base is a shell of its own shape round the hardware chamber, tied to it by ribs; the chamber’s top is the neck the shade locks onto. <b>One body</b>: the shade’s own outline runs right down to the bed and the hardware chamber stands inside its bottom, tied to the wall by ribs and a floor, so the whole lamp is one print (plus the bottom cover if you use one). The light goes in from below (slot-in puck) or through the open top. The hardware chamber and its settings are in the Lamp tab.', tableBase);
+  {
+    const st = document.createElement('div'); st.className = 'note'; tab.append(st);
+    reg(st, () => tableBase() && P.parts === 'one' && diffuserOn(), () => { st.textContent = 'One body isn’t available while the diffuser is on (it has to go in from below), so this prints as two parts. Turn the diffuser off in Lamp › Diffuser.'; });
+  }
+  const hasBase = () => tableBase() && !combined();
   let part = 'shade';
   try { part = localStorage.getItem('illum.shapePart') || 'shade'; } catch (e) { /* storage unavailable */ }
   const bar = document.createElement('div'); bar.className = 'seg partbar';
@@ -2160,10 +2183,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
     part = b.dataset.v; try { localStorage.setItem('illum.shapePart', part); } catch (err) { /* storage unavailable */ }
     refreshAll(); if (part === 'shade') drawProfile();
   });
-  tab.append(reg(bar, tableBase, syncBar));
+  tab.append(reg(bar, hasBase, syncBar));
   const p = document.createElement('div'), pb = document.createElement('div');
   p.className = pb.className = 'sub'; p.id = 'p-shape-shade'; pb.id = 'p-shape-base';
-  tab.append(reg(p, () => part === 'shade' || !tableBase()), reg(pb, () => part === 'base' && tableBase()));
+  tab.append(reg(p, () => part === 'shade' || !hasBase()), reg(pb, () => part === 'base' && hasBase()));
   h3(p, 'Start from');
   const grid = document.createElement('div'); grid.className = 'presets';
   for (const name of Object.keys(PROFILES)) {
@@ -2191,31 +2214,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Twist', 'twist', -360, 360, 1, '°');
   segmented(p, 'Twist curve', 'twistStyle', { linear: 'Linear', ease: 'Ease', wave: 'Wave' }, () => P.twist !== 0);
 
-  h3(p, 'Shade bottom', () => tableBase() && !combined());
-  segmented(p, 'Bottom', 'skirtMode', { auto: 'Auto', plate: 'Inner plate', neck: 'Neck' }, tableBase);
-  note(p, '<b>Inner plate</b>: the shade’s outside stays exactly as you designed it (shape, twist and pattern) right down to the bed. Inside, a flat plate joins it to the twist-lock collar, and the base’s top becomes a plain neck that the shade’s wall comes down around. <b>Neck</b>: the body narrows down into the collar instead, for shades whose bottom is too narrow to fit around the base’s neck. <b>Auto</b> uses the inner plate whenever it fits.', tableBase);
-  {   // which one Auto picked, shown under the switch
-    const st = document.createElement('div'); st.className = 'note'; p.append(st);
-    reg(st, () => tableBase() && P.skirtMode === 'auto' && P.skirt !== true, () => {
-      st.textContent = skirtOn() ? 'Auto is using the inner plate: the outside follows your design down to the bed.'
-        : 'Auto is using a neck: the shade’s bottom is too narrow to fit around the base’s neck. Widen the bottom of the outline (Shape › profile) to get the inner plate.';
-    });
-  }
-  slider(p, 'Plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', skirtOn);
-  note(p, 'The plate prints as a bridge from the collar out to the wall; turn on supports there if your printer bridges poorly.', skirtOn);
-  slider(p, 'Plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', skirtOn);
-  note(p, 'A 45° fillet under the plate, in the corner where it meets the wall: it shortens the plate’s bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the wall hugs the neck. 0 turns it off.', skirtOn);
-  slider(p, 'Plate ribs', 'skirtRibs', 0, 8, 1, '', skirtOn);
-  note(p, 'Webs under the plate, from the bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the shade for twisting.', skirtOn);
-  slider(p, 'Rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => skirtOn() && P.skirtRibs > 0);
-
   h3(pb, 'Base', tableBase);
   slider(pb, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
   slider(pb, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
-  {   // while printing as one body the two are always locked: shown on and greyed out
-    const row = toggleRow(pb, 'Lock top to shade bottom', 'baseLock', tableBase), cb = row.querySelector('input');
-    reg(document.createElement('i'), null, () => { cb.checked = !!P.baseLock || combined(); cb.disabled = combined(); row.style.opacity = combined() ? 0.6 : ''; });
-  }
+  toggleRow(pb, 'Lock top to shade bottom', 'baseLock', tableBase);
   note(pb, 'Keeps the base’s top the same size as the shade’s bottom, so the two meet edge to edge when locked. Change either one (this slider, the shade’s profile or width) and the other follows. With <b>Match shade</b> the base also carries on the shade’s cross-section and twist, so the joint disappears.', tableBase);
   slider(pb, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
   slider(pb, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
@@ -2230,21 +2232,9 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   toggleRow(pb, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
   slider(pb, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
-  h3(pb, 'One body', tableBase);
-  {   // shown even with the diffuser on (greyed out then), so the group never looks empty
-    const row = toggleRow(pb, 'Print base and shade as one body', 'combine', tableBase), cb = row.querySelector('input');
-    reg(document.createElement('i'), null, () => { cb.disabled = diffuserOn(); row.style.opacity = diffuserOn() ? 0.5 : ''; });
-  }
-  note(pb, 'Prints the base and the shade together as a single piece (base on the bed, the shade rising from it), plus the bottom cover if you use one. There’s no twist lock: the shade’s wall stands straight on the base’s top, which is locked to the shade’s bottom so the outside runs on without a seam. The Shade and Base settings stay separate; the joint follows both. The light source goes in from below (slot-in puck) or through the shade’s open top. Not available with a diffuser, which has to go in from below.', tableBase);
-  {
-    const st = document.createElement('div'); st.className = 'note'; pb.append(st);
-    reg(st, () => tableBase() && diffuserOn(), () => { st.textContent = 'Not available while the diffuser is on: it has to go in from below. Turn the diffuser off (Lamp › Diffuser) to print as one body.'; });
-  }
-  h3(pb, 'Hollow', tableBase);
-  toggleRow(pb, 'Hollow base', 'hollow', tableBase);
-  note(pb, 'Saves filament on a wide base: the solid between the outside and the hardware chamber becomes a closed void. What’s left is an outer shell, floor, roof and a wall around the light source, all the shell thickness, with ribs tying the shell to the chamber wall. The roof has 45° chamfers along both walls and bridges the rest, so it prints without supports. With <b>One body</b> there’s no roof at all: the void opens up into the shade and the ribs hold the chamber wall. The cable channel and air intakes keep a full wall around them. On a shaped base the void is round, so the corners stay solid.', tableBase);
-  slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', () => tableBase() && P.hollow);
-  slider(pb, 'Ribs', 'hollowRibs', 0, 12, 1, '', () => tableBase() && P.hollow);
+  h3(pb, 'Shell', tableBase);
+  slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', tableBase);
+  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; its roof under the step has 45° chamfers along both walls and bridges the rest, held by the ribs, so it prints without supports. The cable channel and air intakes keep a full wall round them.', tableBase);
 }
 
 // Pattern tab
@@ -2313,6 +2303,15 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(p, 'Spoke width', 'spokeW', 3, 16, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
   slider(p, 'Hub width', 'hubW', 3, 14, 0.5, 'mm', () => ringOn() && P.ringStyle === 'spokes');
 
+  h3(p, 'Hardware chamber', tableBase);
+  {
+    const st = document.createElement('div'); st.className = 'note'; p.append(st);
+    reg(st, tableBase, () => { const B = baseDims(); st.textContent = `A cylinder Ø${fmt(2 * B.Rch)} × ${fmt(B.H)} mm holding the light source, cable channel and cover${combined() ? '' : ', with the twist-lock socket on top'}. It sets the smallest the shade’s bottom${combined() ? '' : ' and the base'} can be.`; });
+  }
+  slider(p, 'Chamber wall', 'chamberWall', 1.2, 6, 0.1, 'mm', tableBase);
+  slider(p, 'Ribs', 'hollowRibs', 0, 12, 1, '', tableBase);
+  note(p, 'Radial webs from the chamber out to the base’s shell (two parts) or the shade’s wall (one body), as thick as the base shell. They hold the roof up while it prints and keep the chamber rigid.', tableBase);
+
   h3(p, 'Twist lock', () => twistOn() && !combined());
   slider(p, 'Collar inner Ø', 'collarD', 30, 160, 0.5, 'mm', twistOn);
   slider(p, 'Collar wall', 'collarWall', 1.6, 5, 0.1, 'mm', twistOn);
@@ -2330,6 +2329,13 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   note(p, 'Collar grooves: ribs on the base’s inner wall run in a relief track cut into the collar, so the shade turns freely and only clicks at the very end.', () => twistOn() && P.detent && P.detentStyle === 'collar');
   note(p, 'No room for the click ribs: the wall between the lug grooves is too narrow and the collar is too short above them. Use fewer or narrower lugs, a smaller turn, or a taller collar.', () => twistOn() && P.detent && !detentGeom());
   slider(p, 'Click strength', 'detentFit', 0.1, 0.6, 0.05, 'mm', () => twistOn() && P.detent && !!detentGeom());
+  slider(p, 'Shade plate thickness', 'skirtPlateT', 1.2, 4, 0.1, 'mm', skirtOn);
+  note(p, 'Inside the shade, a flat plate joins the wall to the collar; the outside stays exactly as designed down to the bed. The plate prints as a bridge from the collar out to the wall; turn on supports there if your printer bridges poorly.', skirtOn);
+  slider(p, 'Shade plate chamfer', 'skirtChamfer', 0, 15, 0.5, 'mm', skirtOn);
+  note(p, 'A 45° fillet under the plate where it meets the wall: it shortens the bridge and stiffens the joint. It stays clear of the base neck, so it’s smaller (or left out) where the wall hugs the neck. 0 turns it off.', skirtOn);
+  slider(p, 'Shade plate ribs', 'skirtRibs', 0, 8, 1, '', skirtOn);
+  note(p, 'Webs under the plate, from the shade’s bed up to it, outside the base neck: they hold the plate up while it prints and stiffen the shade for twisting.', skirtOn);
+  slider(p, 'Shade rib thickness', 'skirtRibW', 1.2, 4, 0.1, 'mm', () => skirtOn() && P.skirtRibs > 0);
 
   h3(p, 'Cable & cover', tableBase);
   slider(p, 'Cable Ø', 'cableD', 2, 10, 0.1, 'mm', tableBase);
@@ -2699,10 +2705,8 @@ function buildPart(name, q) {   // watertight part in print orientation
     return conn ? keep(body.add(conn)) : body;
   }
   if (name === 'cover') return keep(buildCover(q.seg).rotate([180, 0, 0]));   // cover prints top-down
-  if (name === 'body') {   // one-piece lamp: the shade's wall stands on the base's top, turned as it would sit locked
-    const S = buildShade(q.n, q.layer), B = baseDims();
-    const wall = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
-    return keep(buildBase(q.seg).add(keep(keep(wall.rotate([0, 0, -P.turn])).translate([0, 0, B.f - 0.02]))));
+  if (name === 'body') {   // one-piece lamp: the shade's wall with the chamber, floor and ribs inside, all cuts through both
+    return buildBase(q.seg, buildShade(q.n, q.layer), true);
   }
   return buildBase(q.seg);
 }
@@ -2771,7 +2775,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { innerPlate, hollowCavity, combined, baseSurface, shadeBottomD, changed, refreshAll, plateFits, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { innerPlate, shellCavity, combined, shadeMinNeed, baseSurface, shadeBottomD, changed, refreshAll, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
