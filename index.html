@@ -1242,8 +1242,8 @@ function baseSurface(B) {
   const patt = P.basePat ? makePattern(Rm) : null, k = P.basePatScale;
   const turn = match ? P.turn * DEG : 0, Hs = P.height;
   const slope = P.twistStyle === 'linear' ? P.twist * DEG : P.twistStyle === 'wave' ? P.twist * DEG * Math.PI : 0;
-  // the shade's body starts on its bed with the inner plate (base z = f), above the collar otherwise
-  const zs0 = f + (skirtOn() ? 0 : P.collarH);
+  // the shade's body starts on its bed with the inner plate or as one body (base z = f), above the collar otherwise
+  const zs0 = f + (skirtOn() || combined() ? 0 : P.collarH);
   const twAt = z => match ? slope * (z - zs0) / Hs : P.baseTwist * DEG * z / H;
   const inner = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0), need = z => (z >= f - 0.5 && !combined() ? B.gr1 : inner) + 2.4;
   // the pattern grows out of the plain bottom edge no steeper than the overhang limit (smoothstep peaks at 1.5× its mean slope)
@@ -1293,26 +1293,30 @@ function baseOuter(B, seg) {
 // The cable channel and any intake holes keep a full wall around them.
 const hollowOn = () => P.hollow && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter';
 function hollowGeom(B) {
-  const t = P.hollowT, surf = baseSurface(B);
-  const zTop = Math.min(skirtOn() ? skirtDims(B).zL : B.H, B.f) - t, zf = t;
+  const t = P.hollowT, surf = baseSurface(B), comb = combined();
+  // as one body the void can stay open at the top, into the shade: no roof to bridge, the ribs hold the chamber wall
+  const zTop = comb ? B.H : Math.min(skirtOn() ? skirtDims(B).zL : B.H, B.f) - t, zf = t;
   const rI = Math.max(baseFeatureR(B), coverActive(B) ? coverOuter(B) : 0) + t;
   const rO = z => { let m = 1e9; for (let k = 0; k < 180; k++) m = Math.min(m, surf(TAU * k / 180, z)); return m - t; };
   // the band of heights (from the floor up) where the void is at least 3 mm wide
   const n = Math.max(2, Math.ceil((zTop - zf) / 1.5)), pts = [];
   for (let i = 0; i <= n; i++) { const z = zf + (zTop - zf) * i / n, r = rO(z); if (r - rI < 3) break; pts.push([r, z]); }
   if (pts.length < 3) return null;
-  return { t, rI, zf, pts };
+  const open = comb && pts.length === n + 1;   // open only if the void reaches the top at full width
+  if (comb && !open) while (pts.length > 2 && pts[pts.length - 1][1] > B.H - t) pts.pop();   // closed: keep a roof
+  return { t, rI, zf, pts, open };
 }
 function hollowCavity(B, Rmax, seg) {
   const g = hollowGeom(B); if (!g) return null;
-  const { t, rI, zf, pts } = g, zc = pts[pts.length - 1][1], wTop = pts[pts.length - 1][0] - rI;
-  const h = Math.max(0, Math.min(wTop / 2 - 0.5, zc - zf - 2));   // roof chamfers
+  const { t, rI, zf, pts, open } = g, wTop = pts[pts.length - 1][0] - rI;
+  if (open) pts.push([pts[pts.length - 1][0], B.H + 1]);   // runs on out through the top
+  const zc = pts[pts.length - 1][1];
+  const h = open ? 0 : Math.max(0, Math.min(wTop / 2 - 0.5, zc - zf - 2));   // roof chamfers
   const poly = [[rI, zf]];
   for (const [r, z] of pts) if (z <= zc - h + 1e-6) poly.push([r, z]);
   const rAt = z => { for (let i = 1; i < pts.length; i++) if (pts[i][1] >= z) { const [r0, z0] = pts[i - 1], [r1, z1] = pts[i]; return r0 + (r1 - r0) * (z - z0) / Math.max(1e-6, z1 - z0); } return pts[pts.length - 1][0]; };
-  if (h > 0) poly.push([rAt(zc - h), zc - h]);
-  poly.push([rAt(zc - h) - h, zc], [rI + h, zc]);
-  if (h > 0) poly.push([rI, zc - h]);
+  if (h > 0) poly.push([rAt(zc - h), zc - h], [rAt(zc - h) - h, zc], [rI + h, zc], [rI, zc - h]);
+  else poly.push([rI, zc]);
   let cav = revolve(poly, 360, seg);
   const keepOut = [];
   for (let k = 0; k < P.hollowRibs; k++) {   // ribs between the chamber wall and the shell, clear of the cable channel at 0°
@@ -2208,7 +2212,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   h3(pb, 'Base', tableBase);
   slider(pb, 'Bottom Ø', 'baseD', 50, 240, 1, 'mm', tableBase);
   slider(pb, 'Top Ø', 'baseTopD', 50, 240, 1, 'mm', tableBase);
-  toggleRow(pb, 'Lock top to shade bottom', 'baseLock', () => tableBase() && !combined());
+  {   // while printing as one body the two are always locked: shown on and greyed out
+    const row = toggleRow(pb, 'Lock top to shade bottom', 'baseLock', tableBase), cb = row.querySelector('input');
+    reg(document.createElement('i'), null, () => { cb.checked = !!P.baseLock || combined(); cb.disabled = combined(); row.style.opacity = combined() ? 0.6 : ''; });
+  }
   note(pb, 'Keeps the base’s top the same size as the shade’s bottom, so the two meet edge to edge when locked. Change either one (this slider, the shade’s profile or width) and the other follows. With <b>Match shade</b> the base also carries on the shade’s cross-section and twist, so the joint disappears.', tableBase);
   slider(pb, 'Height', 'baseH', 10, 150, 0.5, 'mm', tableBase);
   slider(pb, 'Foot chamfer', 'footChamfer', 0, 2, 0.1, 'mm', tableBase);
@@ -2235,7 +2242,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   }
   h3(pb, 'Hollow', tableBase);
   toggleRow(pb, 'Hollow base', 'hollow', tableBase);
-  note(pb, 'Saves filament on a wide base: the solid between the outside and the hardware chamber becomes a closed void. What’s left is an outer shell, floor, roof and a wall around the light source, all the shell thickness, with ribs tying the shell to the chamber wall. The roof has 45° chamfers along both walls and bridges the rest, so it prints without supports. The cable channel and air intakes keep a full wall around them. On a shaped base the void is round, so the corners stay solid.', tableBase);
+  note(pb, 'Saves filament on a wide base: the solid between the outside and the hardware chamber becomes a closed void. What’s left is an outer shell, floor, roof and a wall around the light source, all the shell thickness, with ribs tying the shell to the chamber wall. The roof has 45° chamfers along both walls and bridges the rest, so it prints without supports. With <b>One body</b> there’s no roof at all: the void opens up into the shade and the ribs hold the chamber wall. The cable channel and air intakes keep a full wall around them. On a shaped base the void is round, so the corners stay solid.', tableBase);
   slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', () => tableBase() && P.hollow);
   slider(pb, 'Ribs', 'hollowRibs', 0, 12, 1, '', () => tableBase() && P.hollow);
 }
