@@ -772,7 +772,7 @@ function diffuserSolid(S, seg) {
     const r0 = g.rAtt - P.diffChamfer, h = Rb - r0 + 1;
     let ring = revolve([[r0, g.zLow + 0.01], [Rb, g.zLow - h], [Rb, g.zLow + 0.01]], 360, seg);
     const zMin = puckTopZ(baseDims()) + 0.5;
-    if (zMin < g.zLow) ring = ring.intersect(tr(cyl(g.zLow + 1 - zMin, Rb + 1, Rb + 1, seg), 0, 0, zMin));
+    if (zMin < g.zLow) ring = keep(ring.intersect(tr(cyl(g.zLow + 1 - zMin, Rb + 1, Rb + 1, seg), 0, 0, zMin)));
     else ring = null;
     if (ring) sheet = uni([sheet, ring]);
   }
@@ -1626,8 +1626,8 @@ function update() {
   if (W) gcScope(() => {
     const c = shadeConnector(S, 96, merged ? 0.4 : 0);
     if (c && merged) {
-      const body = new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx }));
-      addSolid(shadeGroup, manifoldToGeo(body.add(c)), connMat, capShadeMat);
+      const body = keep(new W.Manifold(new W.Mesh({ numProp: 3, vertProperties: S.pos, triVerts: S.idx })));
+      addSolid(shadeGroup, manifoldToGeo(keep(body.add(c))), connMat, capShadeMat);
     } else if (merged) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
     else if (c) addSolid(shadeGroup, manifoldToGeo(c), connMat, capShadeMat);
     if (c) connVol = c.volume();
@@ -1878,7 +1878,17 @@ function applyLight() {
 }
 
 let pending = false;
-function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); toast('Could not rebuild the model: ' + e.message); } }); }
+function invalidate() { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; try { update(); } catch (e) { console.error(e); engineFailed(e) || toast('Could not rebuild the model: ' + e.message); } }); }
+// The geometry engine is WebAssembly: once its memory is exhausted or corrupted every later call fails too, so start
+// a fresh copy and rebuild (at most once a minute, so a design that always breaks it can't loop).
+let engineRestartT = 0;
+function engineFailed(e) {
+  if (!/memory|RuntimeError|unreachable|table index|null function/i.test(String(e && (e.message || e)) + (e && e.name))) return false;
+  if (Date.now() - engineRestartT < 60000) { toast('The geometry engine ran out of memory again — reload the page (your design is saved)'); return true; }
+  engineRestartT = Date.now(); W = null; toast('Restarting the geometry engine…');
+  Module().then(m => { m.setup(); W = m; invalidate(); }).catch(err => { console.error(err); toast('Could not restart the geometry engine — reload the page (your design is saved)'); });
+  return true;
+}
 
 let saveT = 0;
 function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('lampstudio', designJSON()); localStorage.setItem('illum.current', JSON.stringify(cur)); } catch (e) { /* storage unavailable */ } }, 400); }
@@ -2732,7 +2742,7 @@ async function exportPlate() {
       return stlBlob(keep(W.Manifold.compose(placed)).getMesh());
     });
     await saveTo(target, blob, name);
-  } catch (e) { console.error(e); alert('Plate export failed: ' + e.message); }
+  } catch (e) { console.error(e); if (!engineFailed(e)) alert('Plate export failed: ' + e.message); }
   busy.classList.remove('on');
 }
 async function runExport(which) {
@@ -2750,7 +2760,7 @@ async function runExport(which) {
       return stlBlob(man.getMesh());
     });
     await saveTo(target, blob, name);
-  } catch (e) { console.error(e); alert('Export failed: ' + e.message + '\nTry reducing pattern depth or increasing wall thickness.'); }
+  } catch (e) { console.error(e); if (!engineFailed(e)) alert('Export failed: ' + e.message + '\nTry reducing pattern depth or increasing wall thickness.'); }
   busy.classList.remove('on');
 }
 document.getElementById('expShade').onclick = () => runExport(combined() ? 'body' : 'shade');
@@ -2775,7 +2785,7 @@ update();
 Module().then(m => { m.setup(); W = m; busy.classList.remove('on'); invalidate(); })
   .catch(e => { console.error(e); busy.textContent = 'Could not load the geometry engine — serve this folder over http (see README).'; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Offline mode unavailable', e));
-window.__lamp = { innerPlate, shellCavity, combined, shadeMinNeed, baseSurface, shadeBottomD, changed, refreshAll, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
+window.__lamp = { innerPlate, engineFailed, shellCavity, combined, shadeMinNeed, baseSurface, shadeBottomD, changed, refreshAll, shadeBottomInner, coverLock, slotDims, buildCover, buildPart, packBed, plateParts, footR, QUALITY, PRINTERS, get P() { return P; }, get W() { return W; }, update, baseDims, buildShade, shadeConnector, buildBase, gcScope };
 </script>
 </body>
 </html>
