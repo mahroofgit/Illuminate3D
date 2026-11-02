@@ -2224,11 +2224,14 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
   h3(pb, 'One body', tableBase);
-  toggleRow(pb, 'Print base and shade as one body', 'combine', () => tableBase() && !diffuserOn());
+  {   // shown even with the diffuser on (greyed out then), so the group never looks empty
+    const row = toggleRow(pb, 'Print base and shade as one body', 'combine', tableBase), cb = row.querySelector('input');
+    reg(document.createElement('i'), null, () => { cb.disabled = diffuserOn(); row.style.opacity = diffuserOn() ? 0.5 : ''; });
+  }
   note(pb, 'Prints the base and the shade together as a single piece (base on the bed, the shade rising from it), plus the bottom cover if you use one. There’s no twist lock: the shade’s wall stands straight on the base’s top, which is locked to the shade’s bottom so the outside runs on without a seam. The Shade and Base settings stay separate; the joint follows both. The light source goes in from below (slot-in puck) or through the shade’s open top. Not available with a diffuser, which has to go in from below.', tableBase);
   {
     const st = document.createElement('div'); st.className = 'note'; pb.append(st);
-    reg(st, () => tableBase() && P.combine && diffuserOn(), () => { st.textContent = 'One body is off while the diffuser is on (Lamp › Diffuser).'; });
+    reg(st, () => tableBase() && diffuserOn(), () => { st.textContent = 'Not available while the diffuser is on: it has to go in from below. Turn the diffuser off (Lamp › Diffuser) to print as one body.'; });
   }
   h3(pb, 'Hollow', tableBase);
   toggleRow(pb, 'Hollow base', 'hollow', tableBase);
