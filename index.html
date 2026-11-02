@@ -206,10 +206,12 @@ main canvas { display: block; width: 100%; height: 100%; }
 #toolbar button svg { flex: none; }
 #toolbar button[hidden] { display: none; }
 @media (max-width: 1320px) { #toolbar button span { display: none; } #toolbar button { padding: 6px 8px; } }
-#viewpad { position: absolute; right: 14px; bottom: 12px; display: grid; grid-template-areas: "i i i i" ". t . ." "l f r k" ". b . ."; grid-template-columns: repeat(4, 46px); gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+#viewpad { position: absolute; right: 14px; bottom: 12px; display: grid; grid-template-areas: "i i i s" ". t . ." "l f r k" ". b . ."; grid-template-columns: repeat(4, 46px); gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
 #viewpad button { border: 0; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 10.5px; padding: 4px 0; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
 #viewpad button.fit { display: flex; gap: 6px; justify-content: center; align-items: center; padding: 7px 0; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
 #viewpad button:hover { color: var(--accent); background: var(--accent-soft); }
+#vpBaseCut { margin-bottom: 2px; color: var(--text) !important; }
+#vpBaseCut.on { color: var(--accent) !important; background: var(--accent-soft); }
 #viewpad { bottom: 104px; }   /* clear of the bottom toolbar and the Section bar above it */
 @media (min-width: 1500px) { #viewpad { bottom: 12px; } }
 .info { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 5px; border-radius: 50%; border: 1px solid currentColor; color: var(--muted); font: italic 700 9px/1 Georgia, serif; vertical-align: 1px; cursor: help; text-transform: none; letter-spacing: 0; opacity: .8; }
@@ -307,6 +309,7 @@ main canvas { display: block; width: 100%; height: 100%; }
       <button data-view="back" style="grid-area:k" title="Back view">Back</button>
       <button data-view="bottom" style="grid-area:b" title="Bottom view">Bottom</button>
       <button id="tbReset" data-view="iso" style="grid-area:i" title="3D view, fit to screen" class="fit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8 8 10v4l4 2 4-2v-4l-4-2Z"/><path d="m8 10 4 2 4-2M12 12v4"/></svg><span>3D · Fit</span></button>
+      <button id="vpBaseCut" style="grid-area:s" title="Section view of the base: cut the lamp in half and zoom in on the base and the joint" aria-label="Base section view"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12l2 11H4L6 9Z"/><path d="M8 9V5h8v4"/><path d="M12 2v20" stroke-dasharray="2 2.2"/></svg></button>
     </div>
     <div id="colorbox" aria-label="Filament colours"><span class="cbl">Shade</span><button class="chip" data-key="color" title="Shade filament colour"></button><span class="sep"></span><span class="cbl">Base</span><button class="chip" data-key="baseColor" title="Base filament colour"></button>
       <div id="swatches" hidden><div class="swt"></div><div class="grid"></div><label class="custom">Custom colour <input type="color"></label></div></div>
@@ -1206,7 +1209,8 @@ function coverCuts(B, seg) {
     return out;
   }
   const L = coverLock(B), { R, g, zb, zr, lugA, turn, ca } = L;
-  const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, L.zv], [R - 0.3, L.zv + L.gv - R + 0.3]];   // 45° roof: no flat overhang
+  // the entry slot shares the groove's 45° roof, so the lugs come up exactly to groove height and turn straight in
+  const vPoly = [[R - 0.3, -1], [L.gv, -1], [L.gv, zr + g - L.gv], [R, zr + (g - R)], [R - 0.3, zr + (g - R)]];
   const hPoly = [[R - 0.3, zb], [g, zb], [g, zr], [R, zr + (g - R)], [R - 0.3, zr + (g - R)]];
   for (const a of L.at) {
     const a0 = a - turn - lugA / 2 - ca, a2 = a + lugA / 2 + ca;   // groove start (entry slot) and end
@@ -2352,9 +2356,11 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
   h3(pb, 'Shell', tableBase);
   slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', tableBase);
+  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
+  slider(pb, 'Ribs', 'hollowRibs', 4, 12, 1, '', tableBase);
+  note(pb, 'Radial webs from the hardware chamber’s wall out to the shell, as thick as the shell. They hold the roof up while it prints and keep the chamber rigid; they’re turned clear of the cable channel and the air vents.', tableBase);
   slider(pb, 'Roof chamfer', 'shellChamfer', 0, 10, 0.5, 'mm', tableBase);
   note(pb, '45° chamfers in both top corners of the hollow, along the shell and along the chamber wall: they shorten the roof’s bridge and print without supports. 0 leaves a flat roof.', tableBase);
-  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4, set on the Lamp tab) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
 }
 
 // Pattern tab
@@ -2429,8 +2435,8 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
     reg(st, tableBase, () => { const B = baseDims(); st.textContent = `A cylinder Ø${fmt(2 * B.Rch)} × ${fmt(B.H)} mm holding the light source, cable channel and cover${combined() ? '' : ', with the twist-lock socket on top'}. It sets the smallest the shade’s bottom${combined() ? '' : ' and the base'} can be.`; });
   }
   slider(p, 'Chamber wall', 'chamberWall', 1.2, 6, 0.1, 'mm', tableBase);
-  slider(p, 'Ribs', 'hollowRibs', 4, 12, 1, '', tableBase);
-  note(p, 'Radial webs from the chamber out to the base’s shell (two parts) or the shade’s wall (one body), as thick as the base shell. They hold the roof up while it prints and keep the chamber rigid.', tableBase);
+  slider(p, 'Ribs', 'hollowRibs', 4, 12, 1, '', () => tableBase() && combined());
+  note(p, 'Radial webs from the chamber out to the shade’s wall, as thick as the base shell (with the floor they hold the chamber in place). In two parts they’re set in Shape › Base › Shell.', () => tableBase() && combined());
 
 
   h3(p, 'Cable & cover', tableBase);
@@ -2588,6 +2594,21 @@ function focusConnector() {
   bb.expandByVector(new THREE.Vector3(0, P.collarH + 12, 0));   // take in the collar and the start of the flare
   bb.expandByScalar(Math.max(4, s.x * 0.04));
   setView('front', bb);
+}
+
+// Base section button: the same cutaway close on the base the Lamp tab opens with; pressing it again puts the
+// cutaway back (if it switched it on) and fits the whole lamp.
+{
+  const btn = document.getElementById('vpBaseCut');
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('on')) {
+      btn.classList.remove('on');
+      if (autoCut) { autoCut = false; if (view3.cut) document.getElementById('tbCut').click(); }
+      setView('iso');
+    } else { focusConnector(); btn.classList.add('on'); }
+  });
+  document.getElementById('viewpad').addEventListener('click', e => { if (e.target.closest('[data-view]')) btn.classList.remove('on'); });
+  document.getElementById('tbCut').addEventListener('click', () => { if (!view3.cut) btn.classList.remove('on'); });
 }
 
 // toolbar
