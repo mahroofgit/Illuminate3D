@@ -1371,16 +1371,17 @@ function shellCavity(B, Rmax, seg) {
   for (const a of shellRibAngles(B)) keepOut.push(rotZ(tr(box(Rmax + 5, t, zc + 2), 0, -t / 2, -1), a));
   const w = P.cableW + 2 * t, hgt = P.cableW + (coverActive(B) ? P.coverT : 0) + t;   // cable channel with a wall round it
   keepOut.push(tr(box(Rmax + 5, w, hgt + 1), 0, -w / 2, -1));
-  // A breather hole up through the floor into each pocket between the ribs: no pocket is sealed, so trapped air can
-  // get out and slicers don't take a closed pocket for a separate object ("split to objects" would lift it out).
-  const walls = [0, ...shellRibAngles(B)].map(a => ((a % 360) + 360) % 360).sort((a, b) => a - b), holes = [];
-  walls.forEach((a, i) => {
-    const am = (a + (((walls[(i + 1) % walls.length] - a) + 360) % 360 || 360) / 2) * DEG;
-    const rOut = surf(am, zf) - tt, hr = 1.5;
-    if (rOut - Rc < 2 * hr + 1.5) return;
-    const r = (Rc + rOut) / 2;
-    holes.push(tr(cyl(zf + 2, hr, hr, 24), r * Math.cos(am), r * Math.sin(am), -1));
-  });
+  // No pocket may be sealed (trapped air, and slicers take a closed pocket for a separate object: "split to objects"
+  // lifts it out). Hidden passages join them all: a small hole through each rib just above the floor, and one across
+  // the cable channel (through its side walls, under the arched roof) that opens the two pockets beside it into it.
+  const hr = 1.2, zp = zf + hr + 0.2, holes = [];
+  const mid = a => { const rOut = surf(a * DEG, zf) - tt; return rOut - Rc < 2 * hr + 1.5 ? 0 : (Rc + rOut) / 2; };
+  for (const a of shellRibAngles(B)) {
+    const r = mid(a);
+    if (r) holes.push(rotZ(tr(rot(cyl(t + 3, hr, hr, 20), [90, 0, 0]), r, (t + 3) / 2, zp), a));
+  }
+  const r0 = mid(0);
+  if (r0) holes.push(tr(rot(cyl(w + 3, hr, hr, 20), [90, 0, 0]), r0, (w + 3) / 2, Math.max(zp, P.cableW / 2)));
   return holes.length ? uni([sub(cav, uni(keepOut)), ...holes]) : sub(cav, uni(keepOut));
 }
 // Air vents through a hollow base: a hole slanting up and in through the outer shell into the void (so you can't see
