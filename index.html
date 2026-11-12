@@ -391,7 +391,7 @@ const DEFAULT = {
   orient: 'table', mount: 'twist',
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
-  baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16, plugD: 20,
+  baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16, plugD: 20.5, pushHole: false,
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, shellChamfer: 3, shadeBlend: 0, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
@@ -1124,9 +1124,15 @@ function applyConstraints() {
 }
 
 const coverActive = B => !B.adapter && P.cover && B.insert !== 'puck';
-// Enclosed puck: a round hole through the floor under the puck's edge, on the cable channel's side, big enough to pass
-// the plug and any inline switch; the puck's cable drops down it into the channel. Its outer edge is the pocket wall.
-const plugHole = B => { const pr = P.puckD / 2 + B.c, r = Math.max(3, Math.min(P.plugD / 2, pr - 2)); return { r, x: pr - r }; };
+// Enclosed puck: a rounded-square hole through the floor under the puck's edge, on the cable channel's side, big enough
+// to pass the plug and any inline switch; the puck's cable drops down it into the channel. Its outer edge is the pocket
+// wall (as on Bambu Lab's LED lamp kit base: 20.5 mm square, 4.5 mm corners). Optionally a second one opposite, to
+// push the puck out from below (it then replaces the finger notch).
+const plugHole = B => { const pr = P.puckD / 2 + B.c, w = Math.max(6, Math.min(P.plugD, pr - 2)); return { w, cr: Math.min(4.5, w / 4), x0: pr - w, x1: pr, x: pr - w / 2 }; };
+function plugHoleCut(B, h, z0, sgn, seg) {
+  const k = plugHole(B), xs = [k.x0 + k.cr, k.x1 - k.cr], ys = [-k.w / 2 + k.cr, k.w / 2 - k.cr];
+  return keep(W.Manifold.hull(xs.flatMap(x => ys.map(y => tr(cyl(h, k.cr, k.cr, Math.max(16, seg / 4)), sgn * x, y, z0)))));
+}
 const puckLift = B => !B.adapter && (B.insert === 'puck' || B.insert === 'slot') ? P.puckLift : 0;
 const riserR = B => B.Ri - B.c - 0.2;   // fills the collar bore with 0.5 mm of play, so the shade still drops on and twists
 // Gap under a slot-in puck: it sits on tape strips or printed raiser ribs instead of flat on the seat, so air can pass
@@ -1485,9 +1491,8 @@ function buildBase(seg, S = null, withWall = false) {
   if (B.insert === 'puck') {
     const pr = P.puckD / 2 + B.c, zP = f + lift - P.puckH;
     ins.push(tr(cyl(P.puckH + 0.01, pr, pr, seg), 0, 0, zP));
-    ins.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, zP));
-    const ph = plugHole(B);
-    ins.push(tr(cyl(zP + 1.02, ph.r, ph.r, seg), ph.x, 0, -1));
+    if (!P.pushHole) ins.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, zP));   // finger notch to lift the puck out
+    for (const sg of P.pushHole ? [1, -1] : [1]) ins.push(plugHoleCut(B, zP + 1.02, -1, sg, seg));
   } else if (B.insert === 'slot') {
     // Puck seat with a slot under it: push the puck up edgewise through the slot, turn it flat, it rests around the slot.
     // 'straight' runs the slot down to the bottom (lowest base); 'funnel' adds a 45° funnel below a thin floor for finger room.
@@ -2217,10 +2222,10 @@ function toggleRow(parent, label, key, when) {
 }
 // Light-source presets: a named set of the puck, slot, diffuser, cable and cover settings. Built-ins ship with the
 // app; custom ones are saved in this browser. Choosing one applies just those settings, the shade is untouched.
-const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'plugD', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
+const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'plugD', 'pushHole', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
   'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'diffVentStyle', 'diffVentN', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
 const BUILTIN_PRESETS = {
-  '60mm Enclosed LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'puck', puck: 'p60', puckD: 60, puckH: 8.2, plugD: 20 },
+  '60mm Enclosed LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'puck', puck: 'p60', puckD: 60, puckH: 8.2, plugD: 20.5, pushHole: true },
   '31mm PCB LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.2, fingerRoom: 2, underPuck: 'tape', underGap: 2, intake: true, intakeN: 4, intakeD: 3.5, puckLift: 8,
     diffuser: false, cableD: 3.2, cableW: 5.4, cableGrip: true, cover: true, coverT: 2.6, coverFit: 0.15 },
 };
@@ -2449,8 +2454,10 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   select(p, 'Puck', 'puck', Object.fromEntries(Object.entries(PUCKS).map(([k, v]) => [k, v.label])), puckOn);
   slider(p, 'Puck Ø', 'puckD', 30, 120, 0.5, 'mm', puckOn);
   slider(p, 'Puck height', 'puckH', 6, 40, 0.5, 'mm', puckOn);
-  slider(p, 'Plug hole Ø', 'plugD', 8, 40, 0.5, 'mm', puckOn);
-  note(p, 'A hole through the floor under the puck’s edge, on the cable channel’s side, wide enough to pass the cable’s plug and any inline switch. Fit the puck with its cable over it: the cable drops down the hole and out along the channel underneath.', puckOn);
+  slider(p, 'Plug hole', 'plugD', 8, 40, 0.5, 'mm', puckOn);
+  note(p, 'A rounded-square hole through the floor under the puck’s edge, on the cable channel’s side, wide enough to pass the cable’s plug and any inline switch (Bambu Lab’s LED lamp kit uses 20.5 mm). Fit the puck with its cable over it: the cable drops down the hole and out along the channel underneath.', puckOn);
+  toggleRow(p, 'Push-out hole', 'pushHole', puckOn);
+  note(p, 'A second hole the same size on the opposite side: push the puck up from underneath to take it out. It replaces the finger notch beside the pocket.', puckOn);
   segmented(p, 'Under the slot', 'slotStyle', { funnel: 'Finger funnel', straight: 'Straight (low base)' }, slotOn);
   slider(p, 'Puck Ø', 'slotD', 15, 80, 0.5, 'mm', slotOn);
   slider(p, 'Puck thickness', 'slotH', 2, 20, 0.1, 'mm', slotOn);
