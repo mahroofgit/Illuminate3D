@@ -1484,6 +1484,10 @@ function buildBase(seg, S = null, withWall = false) {
     ins.push(tr(cyl(P.puckH + 0.01, pr, pr, seg), 0, 0, zP));
     ins.push(tr(cyl(P.puckH + 0.01, 7, 7, 32), -pr, 0, zP));
     ins.push(tr(cyl(zP + 1.2, P.cableW / 2, P.cableW / 2, 32), 0, 0, -1));
+    // side exit, for pucks whose cable leaves at the bottom edge: a shaft hugging the pocket wall over the cable
+    // channel, open into the pocket's floor, so the cable bends straight down into the channel
+    const rs = P.cableW / 2;
+    ins.push(tr(cyl(zP + 1.01, rs, rs, 32), pr + rs - 0.6, 0, -1));
   } else if (B.insert === 'slot') {
     // Puck seat with a slot under it: push the puck up edgewise through the slot, turn it flat, it rests around the slot.
     // 'straight' runs the slot down to the bottom (lowest base); 'funnel' adds a 45° funnel below a thin floor for finger room.
@@ -1781,9 +1785,11 @@ function update() {
     const lg = new THREE.LatheGeometry(prof.map(([r, z]) => new THREE.Vector2(r, z)), 64); lg.rotateX(Math.PI / 2);
     ghostGroup.add(new THREE.Mesh(lg, ghostMat));
     ghostGroup.add(zCyl(Rl, Rl, Math.min(0.6, ld), zt - ld, glowMat));
-    const cr = Math.max(1, Math.min(P.cableD / 2, hb / 2)), cg = new THREE.CylinderGeometry(cr, cr, 8, 20);
-    cg.rotateZ(Math.PI / 2); cg.translate(R - 2, 0, zb + cr);
+    // the cable: out of the edge, then down the side shaft into the cable channel
+    const cr = Math.max(1, Math.min(P.cableD / 2, hb / 2)), xs = R + B.c + P.cableW / 2 - 0.6, cz = zb + cr;
+    const cg = new THREE.CylinderGeometry(cr, cr, xs - R + 2, 20); cg.rotateZ(Math.PI / 2); cg.translate((R - 2 + xs) / 2, 0, cz);
     ghostGroup.add(new THREE.Mesh(cg, ghostMat));
+    if (cz > cr + 0.5) ghostGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(cr, cr, cz, 20).rotateX(Math.PI / 2).translate(xs, 0, cz / 2), ghostMat));
     lightZ = zt + 30;
   } else if (twist && B.insert === 'slot') {
     const z = slotDims(B).zSeat + underGap(), r = P.slotD / 2;
