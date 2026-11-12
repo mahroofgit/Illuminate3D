@@ -350,6 +350,7 @@ const FITTINGS = {
 };
 const PUCKS = {
   p70: { label: 'USB puck Ø70 × 16', d: 70, h: 16 },
+  p60: { label: 'Aluminium puck Ø60 × 8.2', d: 60, h: 8.2 },
   p50: { label: 'Small puck Ø50 × 12', d: 50, h: 12 },
   p90: { label: 'Large puck Ø90 × 20', d: 90, h: 20 },
   custom: { label: 'Custom size', d: null, h: null },
@@ -1772,9 +1773,17 @@ function update() {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(fit.bulbR, 40, 24), glowMat); bulb.position.z = z0 + fit.bulbZ; ghostGroup.add(bulb);
     lightZ = z0 + fit.bulbZ;
   } else if (twist && B.insert === 'puck') {
-    const zt = B.f + puckLift(B);
-    ghostGroup.add(zCyl(P.puckD / 2, P.puckD / 2, P.puckH - 2, zt - P.puckH));
-    ghostGroup.add(zCyl(P.puckD / 2 - 6, P.puckD / 2 - 6, 2, zt - 2, glowMat));
+    // a typical enclosed puck: a flat metal disc in two halves (a fine seam round the side), a rim round a frosted
+    // lens set just below the top, and the cable leaving sideways at the bottom edge
+    const zt = B.f + puckLift(B), R = P.puckD / 2, H = P.puckH, zb = zt - H, hb = H * 0.45;
+    const rim = Math.min(4.5, R * 0.15), Rl = R - rim, ld = Math.min(1.2, H * 0.15), sd = Math.min(0.4, R * 0.02);
+    const prof = [[0, zb], [R, zb], [R, zb + hb], [R - sd, zb + hb], [R - sd, zb + hb + 0.3], [R, zb + hb + 0.3], [R, zt], [Rl, zt], [Rl, zt - ld], [0, zt - ld]];
+    const lg = new THREE.LatheGeometry(prof.map(([r, z]) => new THREE.Vector2(r, z)), 64); lg.rotateX(Math.PI / 2);
+    ghostGroup.add(new THREE.Mesh(lg, ghostMat));
+    ghostGroup.add(zCyl(Rl, Rl, Math.min(0.6, ld), zt - ld, glowMat));
+    const cr = Math.max(1, Math.min(P.cableD / 2, hb / 2)), cg = new THREE.CylinderGeometry(cr, cr, 8, 20);
+    cg.rotateZ(Math.PI / 2); cg.translate(R - 2, 0, zb + cr);
+    ghostGroup.add(new THREE.Mesh(cg, ghostMat));
     lightZ = zt + 30;
   } else if (twist && B.insert === 'slot') {
     const z = slotDims(B).zSeat + underGap(), r = P.slotD / 2;
@@ -2204,6 +2213,7 @@ function toggleRow(parent, label, key, when) {
 const PRESET_KEYS = ['orient', 'mount', 'baseType', 'insert', 'slotStyle', 'puck', 'puckD', 'puckH', 'slotD', 'slotH', 'slotW', 'seatDepth', 'slotPlateT', 'fingerRoom', 'underPuck', 'underGap', 'intake', 'intakeN', 'intakeD', 'puckLift',
   'diffuser', 'diffStyle', 'diffT', 'diffGap', 'diffChamfer', 'diffVent', 'diffVentStyle', 'diffVentN', 'cableD', 'cableW', 'cableGrip', 'cover', 'coverT', 'coverFit'];
 const BUILTIN_PRESETS = {
+  '60mm Enclosed LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'puck', puck: 'p60', puckD: 60, puckH: 8.2 },
   '31mm PCB LED Puck': { orient: 'table', mount: 'twist', baseType: 'table', insert: 'slot', slotStyle: 'funnel', slotD: 32, slotH: 2.2, slotW: 5.5, seatDepth: 2.6, slotPlateT: 1.2, fingerRoom: 2, underPuck: 'tape', underGap: 2, intake: true, intakeN: 4, intakeD: 3.5, puckLift: 8,
     diffuser: false, cableD: 3.2, cableW: 5.4, cableGrip: true, cover: true, coverT: 2.6, coverFit: 0.15 },
 };
