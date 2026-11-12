@@ -392,7 +392,7 @@ const DEFAULT = {
   fitting: 'E27', holeD: 40.5, socketD: 44,
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p70', puckD: 70, puckH: 16, plugD: 20.5, pushHole: false, puckFit: 0.3, puckRecess: 0,
-  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollowT: 2, hollowRibs: 6, shellChamfer: 3, shadeBlend: 0, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollow: true, hollowT: 2, hollowRibs: 6, shellChamfer: 3, shadeBlend: 0, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.25,
@@ -1477,7 +1477,7 @@ function buildBase(seg, S = null, withWall = false) {
     const sd = skirtDims(B);
     body = keep(body.intersect(uni([cyl(sd.zL, Rmax + 5, Rmax + 5, seg), tr(cyl(H - sd.zL + 1, sd.Rneck, sd.Rneck, seg), 0, 0, sd.zL - 0.01)])));
   }
-  const cav = skirtOn() ? shellCavity(B, Rmax, seg) : null;
+  const cav = skirtOn() && P.hollow ? shellCavity(B, Rmax, seg) : null;
   if (cav) body = sub(body, cav);
   const cut = combined() ? [] : [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
   const gr0 = B.boreR - 0.6, g1 = B.gr1, lh = P.lugH + B.c, roof = g1 - B.Ro - B.c;
@@ -2406,12 +2406,15 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
   h3(pb, 'Shell', tableBase);
-  slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', tableBase);
-  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', tableBase);
-  slider(pb, 'Ribs', 'hollowRibs', 4, 12, 1, '', tableBase);
-  note(pb, 'Radial webs from the hardware chamber’s wall out to the shell, as thick as the shell. They hold the roof up while it prints and keep the chamber rigid; they’re turned clear of the cable channel and the air vents.', tableBase);
-  slider(pb, 'Roof chamfer', 'shellChamfer', 0, 10, 0.5, 'mm', tableBase);
-  note(pb, '45° chamfers in both top corners of the hollow, along the shell and along the chamber wall: they shorten the roof’s bridge and print without supports. 0 leaves a flat roof.', tableBase);
+  const shellOn = () => tableBase() && P.hollow;
+  toggleRow(pb, 'Hollow', 'hollow', tableBase);
+  note(pb, 'Off prints the base solid: heavier and slower, but stiffer and no hidden pockets. On makes it a shell round the hardware chamber, tied to it by ribs.', tableBase);
+  slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', shellOn);
+  note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', shellOn);
+  slider(pb, 'Ribs', 'hollowRibs', 4, 12, 1, '', shellOn);
+  note(pb, 'Radial webs from the hardware chamber’s wall out to the shell, as thick as the shell. They hold the roof up while it prints and keep the chamber rigid; they’re turned clear of the cable channel and the air vents.', shellOn);
+  slider(pb, 'Roof chamfer', 'shellChamfer', 0, 10, 0.5, 'mm', shellOn);
+  note(pb, '45° chamfers in both top corners of the hollow, along the shell and along the chamber wall: they shorten the roof’s bridge and print without supports. 0 leaves a flat roof.', shellOn);
 }
 
 // Pattern tab
