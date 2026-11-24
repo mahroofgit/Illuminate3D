@@ -264,6 +264,7 @@ main canvas { display: block; width: 100%; height: 100%; }
           <button class="mi" id="expShade" title="Export the shade on its own"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><span><b>Shade</b><small>STL of the shade only</small></span></button>
           <button class="mi" id="expBase" title="Export the base on its own"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><span><b>Base</b><small>STL of the base only</small></span></button>
           <button class="mi" id="expCover" title="Export the bottom cover on its own" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><span><b>Cover</b><small>STL of the bottom cover only</small></span></button>
+          <button class="mi" id="expLegs" title="Export one leg (print one per leg)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><span><b>Leg</b><small>STL of one leg — print one per leg</small></span></button>
           </div></div>
       </div>
     </div>
@@ -367,7 +368,7 @@ const LIGHT_TEMPS = { 2200: '#ff9e4a', 2700: '#ffb46b', 3000: '#ffc184', 4000: '
 // Lamp ideas: whole-look starting points (shade shape and texture, base shape, colours). Applying one replaces those
 // settings only; the light source, twist-lock and print settings stay as they are.
 const LOOK_KEYS = ['height', 'width', 'aspect', 'smooth', 'curve', 'profile', 'sides', 'round', 'twist', 'twistStyle', 'wall', 'pat', 'fadeConn', 'fadeOpen',
-  'parts', 'baseStyle', 'baseD', 'baseTopD', 'baseH', 'baseSides', 'baseRound', 'baseTwist', 'basePat', 'basePatScale', 'baseFade', 'shadeBlend', 'color', 'baseColor'];
+  'parts', 'baseStyle', 'baseD', 'baseTopD', 'baseH', 'baseSides', 'baseRound', 'baseTwist', 'basePat', 'basePatScale', 'baseFade', 'shadeBlend', 'color', 'baseColor', 'legs', 'legN', 'legLen', 'legD', 'legTaper', 'legSplay', 'legDepth'];
 const LOOKS = {
   'Mushroom dome': { height: 115, profile: [[0, 104], [0.4, 98], [0.78, 76], [1, 50]], smooth: 0.1, fadeConn: 3, fadeOpen: 2,
     pat: { ribs: { on: true, count: 96, depth: 1.4, sharp: 1 } },
@@ -399,6 +400,14 @@ const LOOKS = {
   'Twisted hex': { height: 180, profile: [[0, 70], [0.5, 86], [1, 70]], sides: 6, round: 0.2, twist: 90, twistStyle: 'ease',
     pat: { rings: { on: true, count: 60, depth: -0.6, sharp: 2 } },
     baseStyle: 'match', baseD: 120, baseTopD: 104, baseH: 45, color: '#9fb8a3', baseColor: '#9fb8a3' },
+  'Drum on legs': { height: 150, profile: [[0, 74], [1, 74]], curve: 'linear', smooth: 0, fadeConn: 6, fadeOpen: 4,
+    pat: { ribs: { on: true, count: 40, depth: 4, sharp: 0.55 } },
+    baseStyle: 'plain', baseD: 126, baseTopD: 110, baseH: 32, legs: true, legN: 3, legLen: 150, legD: 14, legTaper: 0.65, legSplay: 20, legDepth: 16,
+    color: '#f4e9d8', baseColor: '#6b4a32' },
+  'Lantern on legs': { height: 190, profile: [[0, 62], [0.2, 84], [0.5, 92], [0.8, 84], [1, 60]], smooth: 0.2,
+    pat: { rings: { on: true, count: 26, depth: 1.1, sharp: 2.5 } },
+    baseStyle: 'plain', baseD: 120, baseTopD: 104, baseH: 30, legs: true, legN: 4, legLen: 110, legD: 12, legTaper: 0.6, legSplay: 24, legDepth: 15,
+    color: '#fbf7ee', baseColor: '#1f1d1c' },
   'Accordion mushroom': { height: 115, profile: [[0, 104], [0.45, 98], [0.8, 82], [1, 72]], smooth: 0.1, fadeConn: 2, fadeOpen: 6,
     pat: { rings: { on: true, count: 14, depth: 1.1, sharp: 0.7 } },
     baseStyle: 'custom', baseSides: 0, baseD: 84, baseTopD: 74, baseH: 95, basePat: true, color: '#f6b89a', baseColor: '#8f9ae0' },
@@ -468,6 +477,7 @@ const DEFAULT = {
   ringStyle: 'spokes', spokes: 4, spokeW: 7, hubW: 6, plateT: 2.6,
   baseType: 'table', insert: 'puck', puck: 'p60', puckD: 60, puckH: 8.2, plugD: 20.5, pushHole: false, puckFit: 0, puckRecess: 0,
   slotD: 33, slotH: 5, slotW: 6, seatDepth: 2, slotPlateT: 2, fingerRoom: 4, slotStyle: 'funnel', underPuck: 'flat', underGap: 2, intake: false, intakeN: 4, intakeD: 4, baseStyle: 'plain', baseLock: false, parts: 'two', chamberWall: 2, hollow: true, hollowT: 2, hollowRibs: 6, shellChamfer: 3, shadeBlend: 0, skirt: false, skirtMode: 'auto', skirtPlateT: 2, skirtChamfer: 4, skirtRibs: 3, skirtRibW: 2, baseSides: 6, baseRound: 0.35, baseTwist: 0, basePat: true, basePatScale: 1, baseFade: 3,
+  legs: false, legN: 3, legLen: 120, legD: 12, legTaper: 0.6, legSplay: 18, legDepth: 16, legFit: 0.2,
   collarD: 76, collarWall: 2.4, collarH: 14,
   lugs: 3, lugW: 22, lugH: 4, lugDepth: 2, turn: 30, clearance: 0.3, detent: true, detentStyle: 'lug', detentFit: 0.3,
   baseD: 116, baseTopD: 96, baseH: 42, footChamfer: 0.6, cableW: 5, cableD: 3, cableGrip: true, puckLift: 0, cover: false, coverT: 2, diffuser: false, diffStyle: 'flat', diffT: 0.8, diffGap: 6, diffVent: 0, diffVentStyle: 'center', diffVentN: 4, diffChamfer: 3, coverFit: 0.25,
@@ -1419,7 +1429,7 @@ function baseOuter(B, seg) {
 const shellRibN = () => Math.max(4, P.hollowRibs);
 // rib angles: evenly spread, turned as far as possible from the cable channel (0°) and the air vents
 function shellRibAngles(B) {
-  const n = shellRibN(), avoid = [0, ...(intakeOn() ? intakeLayout(B, true).map(h => h.a) : [])];
+  const n = shellRibN(), avoid = [0, ...(intakeOn() ? intakeLayout(B, true).map(h => h.a) : []), ...(legsOn() ? legAngles() : [])];
   const wrap = a => Math.abs(((a % 360) + 540) % 360 - 180);
   let best = 180 / n, score = -1;
   for (let off = 0; off < 360 / n; off += 0.5) {
@@ -1539,6 +1549,49 @@ function cutWallGeo(S, cuts) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return geo;
 }
+// Legs: the base stands on splayed legs that plug into angled sockets in its underside. The base still prints flat on
+// its bottom; each leg prints standing on its wide (socket) end, or the sockets take wooden dowels of the same Ø. The
+// legs sit as far from the cable channel (0°) and the push-out hole (180°) as they can, near the base's outer edge.
+const legsOn = () => P.legs && P.mount === 'twist' && P.orient !== 'pendant' && P.baseType !== 'adapter' && !combined();
+function legAngles() {   // turned as far as possible from 0° and 180°
+  const n = Math.round(P.legN);
+  let best = 0, off = 0;
+  for (let o = 0; o < 360 / n; o += 1) {
+    let m = 180;
+    for (let k = 0; k < n; k++) { const a = (o + k * 360 / n) % 180; m = Math.min(m, a, 180 - a); }
+    if (m > best + 0.01) { best = m; off = o; }
+  }
+  return Array.from({ length: n }, (_, k) => off + k * 360 / n);
+}
+function legLayout(B) {
+  const n = Math.round(P.legN), phi = P.legSplay * DEG, rs = P.legD / 2 + P.legFit, angs = legAngles();
+  const surf = P.baseStyle !== 'plain' ? baseSurface(B) : null;
+  const legs = [];
+  for (const a of angs) {
+    const ar = a * DEG;
+    const edge = surf ? surf(ar, 0) : B.Rb - P.footChamfer;
+    const Rs = edge - rs / Math.cos(phi) - 2.4;   // the socket's mouth on the bottom face, a full wall inside the edge
+    legs.push({ a, Rs });
+  }
+  const zHub = (P.legLen - P.legDepth) * Math.cos(phi);   // how high the base stands off the table
+  const footR = Math.max(...legs.map(l => l.Rs)) + (P.legLen - P.legDepth) * Math.sin(phi);
+  return { legs, phi, rs, zHub, footR };
+}
+// place a solid built along +Z from a leg's top end (the socket's bottom) onto that leg's line in the base frame
+function legPlace(m, l, phi) {
+  const T = [(l.Rs - P.legDepth * Math.sin(phi)) * Math.cos(l.a * DEG), (l.Rs - P.legDepth * Math.sin(phi)) * Math.sin(l.a * DEG), P.legDepth * Math.cos(phi)];
+  return tr(rotZ(rot(m, [0, 180 - P.legSplay, 0]), l.a), ...T);
+}
+// one leg in print orientation: its wide end flat on the bed, tapering up to a foot cut level with the table
+function legSolid(seg = 48) {
+  const L = P.legLen, r1 = P.legD / 2, r2 = r1 * P.legTaper, phi = P.legSplay * DEG;
+  const ext = L + r1 * Math.tan(phi) + 1;
+  const cone = cyl(ext, r1, r1 + (r2 - r1) * ext / L, seg);
+  // the table, seen from the leg: everything past the plane through the foot's centre, tilted by the splay
+  const below = tr(rot(tr(box(1000, 1000, 1000), -500, -500, -1000), [0, 180 + P.legSplay, 0]), 0, 0, L);
+  return keep(cone.subtract(below));
+}
+let lastLegClash = false, lastLegFill = 0;
 function buildBase(seg, S = null, withWall = false) {
   const B = baseDims(), { H, f } = B, comb = combined();
   lastBodyCuts = null;
@@ -1552,6 +1605,7 @@ function buildBase(seg, S = null, withWall = false) {
     const sd = skirtDims(B);
     body = keep(body.intersect(uni([cyl(sd.zL, Rmax + 5, Rmax + 5, seg), tr(cyl(H - sd.zL + 1, sd.Rneck, sd.Rneck, seg), 0, 0, sd.zL - 0.01)])));
   }
+  const env = body;   // the solid outline, before hollowing
   const cav = skirtOn() && P.hollow ? shellCavity(B, Rmax, seg) : null;
   if (cav) body = sub(body, cav);
   const cut = combined() ? [] : [tr(cyl(H - f + 1, B.boreR, B.boreR, seg), 0, 0, f)];
@@ -1610,6 +1664,28 @@ function buildBase(seg, S = null, withWall = false) {
   }
   ins.push(...(cav ? shellVents(B, Rmax) : intakeHoles(B, Rmax)));
   if (coverActive(B)) ins.push(...coverCuts(B, seg));
+  lastLegClash = false;
+  if (legsOn()) {
+    // angled sockets, each in a solid sleeve (a full wall round it even where the base is hollow)
+    const LL = legLayout(B), d = P.legDepth, holes = [], sleeves = [];
+    for (const l of LL.legs) {
+      holes.push(legPlace(tr(cyl(d + 6, LL.rs, LL.rs, 40), 0, 0, -0.3), l, LL.phi));
+      sleeves.push(legPlace(tr(cyl(d + 9, LL.rs + 2.4, LL.rs + 2.4, 40), 0, 0, -2.7), l, LL.phi));
+    }
+    const hAll = uni(holes);
+    lastLegClash = ins.length > 0 && !keep(hAll.intersect(uni(ins))).isEmpty();
+    result = keep(result.add(keep(uni(sleeves).intersect(env))));
+    ins.push(hAll);
+    // a sleeve can wall off part of the hollow; a small hidden passage across each socket opens it to the socket's mouth,
+    // so the slicer never sees a sealed pocket
+    if (cav) {
+      const w = 2 * (LL.rs + 2.4) + 2, wi = LL.rs + 3.4;   // across the socket, and from it in toward the middle
+      for (const l of LL.legs) {
+        ins.push(legPlace(tr(rot(cyl(w, 1.2, 1.2, 20), [90, 0, 0]), 0, w / 2, d / 2), l, LL.phi));
+        ins.push(legPlace(tr(rot(cyl(wi, 1.2, 1.2, 20), [0, 90, 0]), 0, 0, d / 2), l, LL.phi));   // the leg frame’s +X points in, toward the axis
+      }
+    }
+  }
   const insAll = uni(ins);
   if (comb) lastBodyCuts = keep(insAll);   // the preview cuts the shade's wall with these too
   result = sub(result, insAll);
@@ -1638,6 +1714,16 @@ function buildBase(seg, S = null, withWall = false) {
       }
     }
     if (beads.length) result = keep(result.add(sub(uni(beads), sub(tr(cyl(P.cableW + 3, Rmax + 5, Rmax + 5, seg), 0, 0, -1), body))));
+  }
+  lastLegFill = 0;
+  if (legsOn()) {
+    // The sockets' sleeves can close off part of the hollow (or leave specks where they graze other cuts). A sealed
+    // pocket would print as a hidden part the slicer shows on its own, so specks are dropped and sealed pockets filled.
+    const pcs = result.decompose().map(keep), drop = m => { const v = m.volume(); return Math.abs(v) < 1 || v < 0; };
+    if (pcs.length > 1 && pcs.some(drop)) {
+      for (const m of pcs) { const v = m.volume(); if (v <= -1) lastLegFill -= v; }
+      result = keep(W.Manifold.compose(pcs.filter(m => !drop(m))));
+    }
   }
   const dg = combined() ? null : detentGeom();
   if (dg) {   // vertical click ribs on the bore wall or the lug-groove wall (rounded, so they print smooth over many layers)
@@ -1683,6 +1769,7 @@ const shadeGroup = new THREE.Group(); assembly.add(shadeGroup);
 const baseGroup = new THREE.Group(); assembly.add(baseGroup);
 const ghostGroup = new THREE.Group(); assembly.add(ghostGroup);
 const coverGroup = new THREE.Group(); assembly.add(coverGroup);
+const legGroup = new THREE.Group(); assembly.add(legGroup);
 assembly.add(bulbLight);
 
 const shadeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.FrontSide });
@@ -1861,13 +1948,13 @@ function update() {
   geo.setIndex(new THREE.BufferAttribute(S.idx, 1));
   geo.computeVertexNormals();
   const ov = analyse(S, geo);
-  clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup); clearGroup(coverGroup);
+  clearGroup(shadeGroup); clearGroup(baseGroup); clearGroup(ghostGroup); clearGroup(coverGroup); clearGroup(legGroup);
   connMat.color.set(P.color); baseMat.color.set(combined() ? P.color : P.baseColor);
   // in the cutaway the shade and connector are merged into one solid, so the section shows no seams where they overlap
   const merged = view3.cut && W && P.mount !== 'none', wallCut = W && combined();
   if (!merged && !wallCut) addSolid(shadeGroup, geo, shadeMat, capShadeMat);
 
-  let connVol = 0, baseVol = 0, coverVol = 0, baseBox = null, baseOv = null;
+  let connVol = 0, baseVol = 0, coverVol = 0, legVol = 0, baseBox = null, baseOv = null;
   const B = baseDims();
   if (W) gcScope(() => {
     const c = shadeConnector(S, 96, merged ? 0.4 : 0);
@@ -1889,7 +1976,18 @@ function update() {
       addSolid(coverGroup, manifoldToGeo(cv), baseMat, capBaseMat);
       coverGroup.position.z = view3.explode ? -30 : 0;
     }
+    if (legsOn()) {
+      const LL = legLayout(B), ls = legSolid(48), g = manifoldToGeo(ls); legVol = ls.volume() * LL.legs.length;
+      for (const l of LL.legs) {   // each leg on its socket's line (same placement as the base's cut)
+        const m = new THREE.Group(); addSolid(m, g, baseMat, capBaseMat);
+        m.position.set((l.Rs - P.legDepth * Math.sin(LL.phi)) * Math.cos(l.a * DEG), (l.Rs - P.legDepth * Math.sin(LL.phi)) * Math.sin(l.a * DEG), P.legDepth * Math.cos(LL.phi));
+        m.rotation.set(0, (180 - P.legSplay) * DEG, l.a * DEG, 'ZYX');
+        legGroup.add(m);
+      }
+      legGroup.position.z = view3.explode ? -30 : 0;
+    }
   });
+  assembly.position.z = legsOn() ? legLayout(B).zHub : 0;
 
   // place parts (assembly coords: base print frame, Z up)
   const twist = P.mount === 'twist', comb = combined();
@@ -1897,7 +1995,7 @@ function update() {
   shadeGroup.position.set(0, 0, twist && !comb ? B.f + ex : 0);   // one body: the shade itself stands on the bed
   shadeGroup.rotation.z = twist && !comb && !view3.explode ? -P.turn * DEG : 0;
   assembly.rotation.x = P.orient === 'pendant' ? Math.PI : 0;
-  shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw; coverGroup.visible = view3.cover;
+  shadeGroup.visible = view3.shade; baseGroup.visible = view3.base; ghostGroup.visible = view3.hw; coverGroup.visible = view3.cover; legGroup.visible = view3.base;
 
   // ghost hardware: socket + bulb, or LED puck
   const fit = FITTINGS[P.fitting] || FITTINGS.E27;
@@ -1978,6 +2076,14 @@ function update() {
       const okH = P.holeD < P.collarD - 4;
       if (!comb) checks.push([okH, okH ? `Socket Ø${P.holeD} sits inside the Ø${P.collarD} collar` : `Collar Ø${P.collarD} is too small for the Ø${P.holeD} socket`]);
     }
+    if (legsOn()) {
+      const LL = legLayout(B), total = LL.zHub + B.f + S.zEnd;
+      checks.push([!lastLegClash, lastLegClash ? 'A leg socket runs into the light-source pocket, plug hole or cable channel — shorten the socket depth, reduce the splay or widen the base’s bottom' : `${LL.legs.length} leg sockets Ø${fmt(2 * LL.rs)} × ${fmt(P.legDepth)} mm at ${fmt(P.legSplay)}°: the base stands ${fmt(LL.zHub)} mm up, feet span Ø${fmt(2 * LL.footR)}`]);
+      const steady = LL.footR >= 0.22 * total;
+      checks.push([steady, steady ? `Stands steady: feet span Ø${fmt(2 * LL.footR)} for a ${fmt(total)} mm tall lamp` : `Feet span only Ø${fmt(2 * LL.footR)} for a ${fmt(total)} mm tall lamp — it may tip; splay the legs more, widen the base or shorten the legs`]);
+      if (lastLegFill > 0) checks.push([true, `Leg sleeves closed off ${fmt(lastLegFill / 1000)} cm³ of the hollow; filled solid (+${(lastLegFill / 1000 * dens).toFixed(0)} g) so nothing is sealed inside. Fewer shell ribs usually avoid it.`]);
+      if (P.legLen > pr.z) checks.push([false, `Legs are ${fmt(P.legLen)} mm long, over the ${pr.z} mm build height`]);
+    }
     const lift = puckLift(B);
     if (lift > 0) {
       const rr = riserR(B); let clash = false;
@@ -2020,13 +2126,16 @@ function update() {
   const rows = [['Shade', `Ø${shadeW.toFixed(0)} × ${shadeH.toFixed(0)} mm`, shadeG]];
   if (baseBox) rows.push([B.adapter ? 'Adapter' : combined() ? 'Chamber' : 'Base', `Ø${baseW.toFixed(0)} × ${B.H.toFixed(0)} mm`, baseG]);
   if (coverVol) rows.push(['Cover', '', coverG]);
-  const totH = baseBox && !B.adapter && !combined() ? Math.max(B.H, B.f + shadeH) : shadeH;
+  const legG = legVol / 1000 * dens, legUp = legsOn() ? legLayout(B).zHub : 0;
+  if (legVol) rows.push([`Legs ×${Math.round(P.legN)}`, `Ø${fmt(P.legD)} × ${P.legLen.toFixed(0)} mm`, legG]);
+  const totH = (baseBox && !B.adapter && !combined() ? Math.max(B.H, B.f + shadeH) : shadeH) + legUp;
   document.getElementById('dims').innerHTML = rows.map(([n, d, g]) => `<div><span>${n}</span><span>${d}</span><span>≈${g.toFixed(0)} g</span></div>`).join('') +
-    `<div class="tot"><span>Total</span><span>${totH.toFixed(0)} mm tall · Ø${Math.max(shadeW, baseW).toFixed(0)} max</span><span>≈${(shadeG + baseG + coverG).toFixed(0)} g ${P.material}</span></div>`;
+    `<div class="tot"><span>Total</span><span>${totH.toFixed(0)} mm tall · Ø${Math.max(shadeW, baseW).toFixed(0)} max</span><span>≈${(shadeG + baseG + coverG + legG).toFixed(0)} g ${P.material}</span></div>`;
   document.getElementById('expBase').hidden = !twist || combined();
   document.querySelector('#expShade span b').textContent = combined() ? 'Lamp body' : 'Shade';
   document.querySelector('#expShade span small').textContent = combined() ? 'STL of the one-piece base and shade' : 'STL of the shade only';
   document.getElementById('expCover').hidden = document.getElementById('tbCover').hidden = !(twist && coverActive(B));
+  document.getElementById('expLegs').hidden = !legsOn();
   document.querySelector('#expBase span').textContent = B.adapter ? 'Adapter' : 'Base';
   document.getElementById('expPlate').hidden = !twist;
   document.getElementById('tbExplode').hidden = !twist;
@@ -2116,6 +2225,7 @@ function plateParts(B, shadeR) {   // footprint radii from the preview (parts ar
   if (P.mount === 'twist') {
     if (!comb) parts.push({ name: 'base', r: Math.max(B.Rt, B.Rb) });
     if (coverActive(B)) { const k = coverShape(B); parts.push({ name: 'cover', r: k.rect ? Math.hypot(k.hx, k.hw) : k.R + 1.2 }); }
+    if (legsOn()) for (let k = 0; k < Math.round(P.legN); k++) parts.push({ name: 'leg', r: P.legD / 2 + 0.5 });
   }
   return parts;
 }
@@ -2544,6 +2654,21 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   toggleRow(pb, 'Shade patterns on base', 'basePat', () => styledOn() && anyPat());
   slider(pb, 'Pattern depth', 'basePatScale', 0, 2, 0.05, '×', () => styledOn() && anyPat() && P.basePat);
   slider(pb, 'Edge fade', 'baseFade', 0, 15, 0.5, 'mm', () => styledOn() && anyPat() && P.basePat);
+  h3(pb, 'Legs', () => tableBase() && !combined());
+  const legsUI = () => tableBase() && !combined() && P.legs;
+  toggleRow(pb, 'Stand on legs', 'legs', () => tableBase() && !combined());
+  note(pb, 'Splayed legs plug into angled sockets in the base’s underside, lifting the whole lamp off the table. The base still prints flat; each leg prints standing on its wide end (Export › Leg, one per leg), or use wooden dowels of the same Ø cut to length. The legs sit clear of the cable channel and the push-out hole, and the cable hangs down between them.', () => tableBase() && !combined());
+  slider(pb, 'Legs', 'legN', 3, 6, 1, '', legsUI);
+  slider(pb, 'Leg length', 'legLen', 40, 250, 1, 'mm', legsUI);
+  slider(pb, 'Leg Ø', 'legD', 6, 25, 0.5, 'mm', legsUI);
+  note(pb, 'At the socket end. Standard dowel sizes are 8, 10, 12 and 16 mm.', legsUI);
+  slider(pb, 'Leg taper', 'legTaper', 0.4, 1, 0.05, '×', legsUI);
+  note(pb, 'Foot Ø as a share of the socket end’s Ø. 1 keeps the leg straight, as a dowel is.', legsUI);
+  slider(pb, 'Splay', 'legSplay', 0, 35, 1, '°', legsUI);
+  note(pb, 'How far the legs lean out from upright. The sockets lean as much, so keep it under your overhang limit (Print tab); up to about 35° prints clean.', legsUI);
+  slider(pb, 'Socket depth', 'legDepth', 8, 30, 0.5, 'mm', legsUI);
+  slider(pb, 'Socket clearance', 'legFit', 0, 0.6, 0.05, 'mm', legsUI);
+  note(pb, 'Gap round the leg in its socket. 0.2 mm is a firm push fit for printed legs; dowels vary, so print a test base first or add a drop of glue.', legsUI);
   h3(pb, 'Shell', tableBase);
   const shellOn = () => tableBase() && P.hollow;
   toggleRow(pb, 'Hollow', 'hollow', tableBase);
@@ -2551,7 +2676,7 @@ const socketInsert = () => twistOn() && (P.insert === 'socket' || P.baseType ===
   slider(pb, 'Shell thickness', 'hollowT', 1.2, 6, 0.1, 'mm', shellOn);
   note(pb, 'The base is a shell of its own outside, this thick, with a floor, round the hardware chamber (Lamp tab). The space between follows the outside, so shape, twist and patterns are free; ribs (at least 4) run from the chamber’s wall out to the shell. The roof under the step bridges from the chamber to the shell between the ribs, from the chamfers below if you set them (a few drooping strands there are hidden inside). The cable channel keeps a full wall round it; air intakes are a slanted hole through the shell and a level hole through the chamber wall.', shellOn);
   slider(pb, 'Ribs', 'hollowRibs', 4, 12, 1, '', shellOn);
-  note(pb, 'Radial webs from the hardware chamber’s wall out to the shell, as thick as the shell. They hold the roof up while it prints and keep the chamber rigid; they’re turned clear of the cable channel and the air vents.', shellOn);
+  note(pb, 'Radial webs from the hardware chamber’s wall out to the shell, as thick as the shell. They hold the roof up while it prints and keep the chamber rigid; they’re turned clear of the cable channel, the air vents and any leg sockets.', shellOn);
   slider(pb, 'Roof chamfer', 'shellChamfer', 0, 10, 0.5, 'mm', shellOn);
   note(pb, '45° chamfers in both top corners of the hollow, along the shell and along the chamber wall: they shorten the roof’s bridge and print without supports. 0 leaves a flat roof.', shellOn);
 }
@@ -3015,6 +3140,7 @@ function buildPart(name, q) {   // watertight part in print orientation
     return conn ? keep(body.add(conn)) : body;
   }
   if (name === 'cover') return keep(buildCover(q.seg).rotate([180, 0, 0]));   // cover prints top-down
+  if (name === 'leg') return legSolid(Math.max(48, q.seg / 2));   // stands on its wide end
   if (name === 'body') {   // one-piece lamp: the shade's wall with the chamber, floor and ribs inside, all cuts through both
     return buildBase(q.seg, buildShade(q.n, q.layer), true);
   }
@@ -3066,6 +3192,7 @@ async function runExport(which) {
 document.getElementById('expShade').onclick = () => runExport(combined() ? 'body' : 'shade');
 document.getElementById('expBase').onclick = () => runExport('base');
 document.getElementById('expCover').onclick = () => runExport('cover');
+document.getElementById('expLegs').onclick = () => runExport('leg');
 // Export menu in the app bar
 {
   const btn = document.getElementById('expBtn'), menu = document.getElementById('expMenu');
